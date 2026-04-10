@@ -759,28 +759,78 @@ with tab7:
         gc4.metric("Best Over", int(bat_impact['over_runs'].max()))
         gc5.metric("Total Runs in Impact Overs", int(bat_impact['over_runs'].sum()))
 
+        st.markdown("#### ⚡ vs Pace & Spin")
+        # Build pace/spin stats with frequency
+        bk = bat_impact.groupby('bowl_kind').agg(
+            Impact_Overs=('over_runs','count'),
+            Avg_Runs    =('over_runs','mean')
+        ).reset_index()
+        bk['Avg_Runs'] = bk['Avg_Runs'].round(1)
+        # Total overs vs each bowl kind for frequency
+        bk_total = over_data[over_data['bat']==sel_gc].groupby('bowl_kind').agg(
+            Total_Overs=('over_runs','count')
+        ).reset_index()
+        bk = pd.merge(bk, bk_total, on='bowl_kind', how='left')
+        bk['Impact_Freq%'] = (bk['Impact_Overs'] / bk['Total_Overs'] * 100).round(1)
+
         col8, col9 = st.columns(2)
         with col8:
-            bk = bat_impact.groupby('bowl_kind').agg(
-                Impact_Overs=('over_runs','count'),
-                Avg_Runs    =('over_runs','mean')
-            ).reset_index()
-            bk['Avg_Runs'] = bk['Avg_Runs'].round(1)
-            fig_bk = px.bar(bk, x='bowl_kind', y='Impact_Overs',
-                            color='bowl_kind', text='Impact_Overs',
-                            title=f"{sel_gc} – Impact Overs vs Pace/Spin", height=350)
-            st.plotly_chart(fig_bk, use_container_width=True)
+            fig_bk1 = px.bar(bk, x='bowl_kind', y='Impact_Overs',
+                             color='bowl_kind', text='Impact_Overs',
+                             title=f"{sel_gc} – Impact Overs Count vs Pace/Spin",
+                             height=350)
+            fig_bk1.update_layout(showlegend=False)
+            st.plotly_chart(fig_bk1, use_container_width=True)
 
         with col9:
-            ph_b = bat_impact.groupby('phase').agg(
-                Impact_Overs=('over_runs','count'),
-                Avg_Runs    =('over_runs','mean')
-            ).reset_index()
-            ph_b['Avg_Runs'] = ph_b['Avg_Runs'].round(1)
-            fig_pb = px.bar(ph_b, x='phase', y='Impact_Overs',
-                            color='phase', text='Impact_Overs',
-                            title=f"{sel_gc} – Impact Overs by Phase", height=350)
-            st.plotly_chart(fig_pb, use_container_width=True)
+            fig_bk2 = px.bar(bk, x='bowl_kind', y='Impact_Freq%',
+                             color='bowl_kind', text='Impact_Freq%',
+                             color_discrete_sequence=['#EF553B','#636EFA'],
+                             title=f"{sel_gc} – Impact Frequency % vs Pace/Spin",
+                             height=350)
+            fig_bk2.update_layout(showlegend=False)
+            st.plotly_chart(fig_bk2, use_container_width=True)
+
+        st.markdown("#### 📊 Phase-wise")
+        # Build phase stats with frequency
+        ph_b = bat_impact.groupby('phase', observed=True).agg(
+            Impact_Overs=('over_runs','count'),
+            Avg_Runs    =('over_runs','mean')
+        ).reset_index()
+        ph_b['Avg_Runs'] = ph_b['Avg_Runs'].round(1)
+        # Total overs per phase for frequency
+        ph_total = over_data[over_data['bat']==sel_gc].groupby(
+            'phase', observed=True
+        ).agg(Total_Overs=('over_runs','count')).reset_index()
+        ph_b = pd.merge(ph_b, ph_total, on='phase', how='left')
+        ph_b['Impact_Freq%'] = (ph_b['Impact_Overs'] / ph_b['Total_Overs'] * 100).round(1)
+
+        col10, col11 = st.columns(2)
+        with col10:
+            fig_pb1 = px.bar(ph_b, x='phase', y='Impact_Overs',
+                             color='phase', text='Impact_Overs',
+                             color_discrete_map={
+                                 'Powerplay (1–6)':'#636EFA',
+                                 'Middle (7–16)':'#EF553B',
+                                 'Death (17–20)':'#00CC96'
+                             },
+                             title=f"{sel_gc} – Impact Overs Count by Phase",
+                             height=350)
+            fig_pb1.update_layout(showlegend=False)
+            st.plotly_chart(fig_pb1, use_container_width=True)
+
+        with col11:
+            fig_pb2 = px.bar(ph_b, x='phase', y='Impact_Freq%',
+                             color='phase', text='Impact_Freq%',
+                             color_discrete_map={
+                                 'Powerplay (1–6)':'#636EFA',
+                                 'Middle (7–16)':'#EF553B',
+                                 'Death (17–20)':'#00CC96'
+                             },
+                             title=f"{sel_gc} – Impact Frequency % by Phase",
+                             height=350)
+            fig_pb2.update_layout(showlegend=False)
+            st.plotly_chart(fig_pb2, use_container_width=True)
 
         # Year trend
         yr_b = bat_impact.groupby('year').agg(Impact_Overs=('over_runs','count')).reset_index()
