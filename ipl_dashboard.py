@@ -98,13 +98,14 @@ k6.metric("Overall SR", f"{sr:.1f}")
 st.divider()
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab1,tab2,tab3,tab4,tab5,tab6,tab7 = st.tabs([
+tab1,tab2,tab3,tab4,tab5,tab6,tab7,tab8 = st.tabs([
     "🎯 Shot Analysis",
     "📍 Line & Length",
     "🏏 Batter Analysis",
     "🎳 Bowler Analysis",
     "🏆 Team Analysis",
     "📅 Year on Year",
+    "💥 Game Changers",
     "📋 Raw Data"
 ])
 
@@ -559,9 +560,172 @@ with tab6:
     st.plotly_chart(fig5, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 7 — Raw Data
+# TAB 7 — Game Changers
 # ══════════════════════════════════════════════════════════════════════════════
 with tab7:
+    st.subheader("💥 Game Changers – Who Dominates an Over?")
+    st.caption("A batter is a Game Changer when they score 10+ runs in a single over")
+
+    # Build over-level data from filtered df
+    over_data = dff.groupby(
+        ['p_match','inns','over','bat','team_bat','bowl_kind','phase','year'], observed=True
+    ).agg(
+        over_runs =('batruns','sum'),
+        balls     =('batruns','count'),
+        outs      =('out','sum')
+    ).reset_index()
+
+    run_threshold = st.slider("Impact Over: Minimum runs in one over", 6, 20, 10)
+    impact = over_data[over_data['over_runs'] >= run_threshold].copy()
+
+    if impact.empty:
+        st.warning("No data found for this threshold. Try lowering the minimum runs.")
+    else:
+        st.markdown(f"**Total {run_threshold}+ run overs found: {len(impact):,}**")
+        st.divider()
+
+        # ── Overall leaderboard ──
+        st.markdown("### 🏆 Overall Game Changer Leaderboard")
+        overall = impact.groupby('bat').agg(
+            Impact_Overs  =('over_runs','count'),
+            Total_Runs    =('over_runs','sum'),
+            Best_Over     =('over_runs','max'),
+            Avg_Runs      =('over_runs','mean')
+        ).reset_index().sort_values('Impact_Overs', ascending=False).reset_index(drop=True)
+        overall.index += 1
+        overall['Avg_Runs'] = overall['Avg_Runs'].round(1)
+
+        col1, col2 = st.columns([1.2, 1])
+        with col1:
+            fig = px.bar(
+                overall.head(15), x='bat', y='Impact_Overs',
+                color='Impact_Overs', color_continuous_scale='Plasma',
+                text='Impact_Overs',
+                title=f"Top 15 – Most {run_threshold}+ Run Overs", height=420
+            )
+            fig.update_layout(xaxis_tickangle=-40)
+            st.plotly_chart(fig, use_container_width=True)
+        with col2:
+            st.markdown("**Full Leaderboard**")
+            st.dataframe(overall[['bat','Impact_Overs','Total_Runs','Best_Over','Avg_Runs']],
+                         use_container_width=True, height=400)
+
+        st.divider()
+
+        # ── Pace vs Spin ──
+        st.markdown("### ⚡ Game Changers: Pace vs Spin")
+        col3, col4 = st.columns(2)
+
+        with col3:
+            pace_lb = impact[impact['bowl_kind']=='pace bowler'].groupby('bat').agg(
+                Impact_Overs=('over_runs','count'),
+                Total_Runs  =('over_runs','sum'),
+                Best_Over   =('over_runs','max')
+            ).reset_index().sort_values('Impact_Overs', ascending=False).head(10).reset_index(drop=True)
+            pace_lb.index += 1
+            fig2 = px.bar(pace_lb, x='bat', y='Impact_Overs',
+                          color='Impact_Overs', color_continuous_scale='Reds',
+                          text='Impact_Overs',
+                          title=f"Top 10 vs PACE – {run_threshold}+ Run Overs", height=400)
+            fig2.update_layout(xaxis_tickangle=-40)
+            st.plotly_chart(fig2, use_container_width=True)
+            st.dataframe(pace_lb, use_container_width=True)
+
+        with col4:
+            spin_lb = impact[impact['bowl_kind']=='spin bowler'].groupby('bat').agg(
+                Impact_Overs=('over_runs','count'),
+                Total_Runs  =('over_runs','sum'),
+                Best_Over   =('over_runs','max')
+            ).reset_index().sort_values('Impact_Overs', ascending=False).head(10).reset_index(drop=True)
+            spin_lb.index += 1
+            fig3 = px.bar(spin_lb, x='bat', y='Impact_Overs',
+                          color='Impact_Overs', color_continuous_scale='Blues',
+                          text='Impact_Overs',
+                          title=f"Top 10 vs SPIN – {run_threshold}+ Run Overs", height=400)
+            fig3.update_layout(xaxis_tickangle=-40)
+            st.plotly_chart(fig3, use_container_width=True)
+            st.dataframe(spin_lb, use_container_width=True)
+
+        st.divider()
+
+        # ── Phase-wise Game Changers ──
+        st.markdown("### 📊 Game Changers by Phase")
+        phase_opts_gc = ['Powerplay (1–6)', 'Middle (7–16)', 'Death (17–20)']
+
+        col5, col6, col7 = st.columns(3)
+        for col, ph_name, color in zip(
+            [col5, col6, col7],
+            ['Powerplay (1-6)', 'Middle (7-16)', 'Death (17-20)'],
+            ['Teal', 'Oranges', 'Purples']
+        ):
+            with col:
+                ph_lb = impact[impact['phase']==ph_name].groupby('bat').agg(
+                    Impact_Overs=('over_runs','count'),
+                    Best_Over   =('over_runs','max')
+                ).reset_index().sort_values('Impact_Overs', ascending=False).head(8).reset_index(drop=True)
+                ph_lb.index += 1
+                label = ph_name.replace('(','').replace(')','').replace('-','–')
+                fig_ph = px.bar(ph_lb, x='bat', y='Impact_Overs',
+                                color='Impact_Overs', color_continuous_scale=color,
+                                text='Impact_Overs',
+                                title=f"{ph_name}", height=380)
+                fig_ph.update_layout(xaxis_tickangle=-40, showlegend=False)
+                st.plotly_chart(fig_ph, use_container_width=True)
+                st.dataframe(ph_lb, use_container_width=True)
+
+        st.divider()
+
+        # ── Individual batter impact profile ──
+        st.markdown("### 🔍 Individual Batter Impact Profile")
+        sel_gc = st.selectbox("Select Batter", sorted(impact['bat'].unique()), key='gc_bat')
+        bat_impact = impact[impact['bat']==sel_gc]
+
+        gc1, gc2, gc3, gc4 = st.columns(4)
+        gc1.metric("Total Impact Overs", len(bat_impact))
+        gc2.metric("Best Over", int(bat_impact['over_runs'].max()))
+        gc3.metric("Avg Runs in Impact Over", f"{bat_impact['over_runs'].mean():.1f}")
+        gc4.metric("Total Runs in Impact Overs", int(bat_impact['over_runs'].sum()))
+
+        col8, col9 = st.columns(2)
+        with col8:
+            bk = bat_impact.groupby('bowl_kind').agg(
+                Impact_Overs=('over_runs','count'),
+                Avg_Runs    =('over_runs','mean')
+            ).reset_index()
+            bk['Avg_Runs'] = bk['Avg_Runs'].round(1)
+            fig_bk = px.bar(bk, x='bowl_kind', y='Impact_Overs',
+                            color='bowl_kind', text='Impact_Overs',
+                            title=f"{sel_gc} – Impact Overs vs Pace/Spin", height=350)
+            st.plotly_chart(fig_bk, use_container_width=True)
+
+        with col9:
+            ph_b = bat_impact.groupby('phase').agg(
+                Impact_Overs=('over_runs','count'),
+                Avg_Runs    =('over_runs','mean')
+            ).reset_index()
+            ph_b['Avg_Runs'] = ph_b['Avg_Runs'].round(1)
+            fig_pb = px.bar(ph_b, x='phase', y='Impact_Overs',
+                            color='phase', text='Impact_Overs',
+                            title=f"{sel_gc} – Impact Overs by Phase", height=350)
+            st.plotly_chart(fig_pb, use_container_width=True)
+
+        # Year trend
+        yr_b = bat_impact.groupby('year').agg(Impact_Overs=('over_runs','count')).reset_index()
+        fig_yr = px.line(yr_b, x='year', y='Impact_Overs', markers=True,
+                         text='Impact_Overs',
+                         title=f"{sel_gc} – Impact Overs Trend 2023–2025", height=320)
+        st.plotly_chart(fig_yr, use_container_width=True)
+
+        # Distribution of runs scored in impact overs
+        fig_hist = px.histogram(bat_impact, x='over_runs', nbins=15,
+                                title=f"{sel_gc} – Distribution of Runs in Impact Overs",
+                                color_discrete_sequence=['#636EFA'], height=320)
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 8 — Raw Data
+# ══════════════════════════════════════════════════════════════════════════════
+with tab8:
     st.subheader("Filtered Raw Data")
     cols_show = ['year','bat','team_bat','bowl','team_bowl','over','phase',
                  'score','batruns','out','shot_label','line_label','length_label',
