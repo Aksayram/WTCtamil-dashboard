@@ -4,6 +4,27 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
+# ---------------- PASSWORD ----------------
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == "wtc123":  # change password here
+            st.session_state["password_correct"] = True
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        st.error("Wrong Password")
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()
+
 st.set_page_config(page_title="IPL Analytics 2023–2025", layout="wide", page_icon="🏏")
 
 # ── Load & clean ───────────────────────────────────────────────────────────────
