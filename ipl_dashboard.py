@@ -832,18 +832,64 @@ with tab7:
             fig_pb2.update_layout(showlegend=False)
             st.plotly_chart(fig_pb2, use_container_width=True)
 
-        # Year trend
-        yr_b = bat_impact.groupby('year').agg(Impact_Overs=('over_runs','count')).reset_index()
-        fig_yr = px.line(yr_b, x='year', y='Impact_Overs', markers=True,
-                         text='Impact_Overs',
-                         title=f"{sel_gc} – Impact Overs Trend 2023–2025", height=320)
-        st.plotly_chart(fig_yr, use_container_width=True)
+        # ── Year wise trends ──
+        st.markdown("#### 📅 Year on Year Trends")
+        yr_b = bat_impact.groupby('year').agg(
+            Impact_Overs=('over_runs','count')
+        ).reset_index()
+        # Total overs per year for frequency
+        yr_total = over_data[over_data['bat']==sel_gc].groupby('year').agg(
+            Total_Overs=('over_runs','count')
+        ).reset_index()
+        yr_b = pd.merge(yr_b, yr_total, on='year', how='left')
+        yr_b['Impact_Freq%'] = (yr_b['Impact_Overs'] / yr_b['Total_Overs'] * 100).round(1)
 
-        # Distribution of runs scored in impact overs
-        fig_hist = px.histogram(bat_impact, x='over_runs', nbins=15,
-                                title=f"{sel_gc} – Distribution of Runs in Impact Overs",
-                                color_discrete_sequence=['#636EFA'], height=320)
-        st.plotly_chart(fig_hist, use_container_width=True)
+        col12, col13 = st.columns(2)
+        with col12:
+            fig_yr1 = px.line(yr_b, x='year', y='Impact_Overs', markers=True,
+                              text='Impact_Overs',
+                              title=f"{sel_gc} – Impact Overs Count (Year wise)",
+                              height=320)
+            fig_yr1.update_traces(textposition='top center', line_color='#636EFA')
+            st.plotly_chart(fig_yr1, use_container_width=True)
+
+        with col13:
+            fig_yr2 = px.line(yr_b, x='year', y='Impact_Freq%', markers=True,
+                              text='Impact_Freq%',
+                              title=f"{sel_gc} – Impact Frequency % (Year wise)",
+                              height=320)
+            fig_yr2.update_traces(textposition='top center', line_color='#00CC96')
+            st.plotly_chart(fig_yr2, use_container_width=True)
+
+        # ── Distribution of runs in impact overs ──
+        st.markdown("#### 🎯 Impact Over Distributions")
+        col14, col15 = st.columns(2)
+
+        with col14:
+            fig_hist = px.histogram(bat_impact, x='over_runs', nbins=15,
+                                    title=f"{sel_gc} – Distribution of Runs in Impact Overs",
+                                    color_discrete_sequence=['#636EFA'], height=350)
+            fig_hist.update_layout(xaxis_title="Runs Scored in Over", yaxis_title="Count")
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        with col15:
+            # Over-wise impact count (which over number 1-20)
+            over_wise = bat_impact.groupby('over').agg(
+                Impact_Count=('over_runs','count')
+            ).reset_index()
+            over_wise['over'] = over_wise['over'].astype(int)
+            over_wise = over_wise.sort_values('over')
+            fig_ow = px.bar(over_wise, x='over', y='Impact_Count',
+                            color='Impact_Count', color_continuous_scale='Plasma',
+                            text='Impact_Count',
+                            title=f"{sel_gc} – Which Over He Dominates Most (1–20)",
+                            height=350)
+            fig_ow.update_layout(
+                xaxis=dict(tickmode='linear', tick0=1, dtick=1),
+                xaxis_title="Over Number",
+                yaxis_title="Impact Over Count"
+            )
+            st.plotly_chart(fig_ow, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 8 — Raw Data
