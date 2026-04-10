@@ -743,6 +743,67 @@ with tab7:
 
         st.divider()
 
+        # ── Over-wise Game Changer Leaderboard ──
+        st.markdown("### 🎯 Over-wise Game Changer – Who is Most Dangerous in Each Over?")
+        st.caption("Select an over number to see which batters have scored 10+ runs most times in that over")
+
+        sel_over = st.slider("Select Over Number", 1, 20, 1, key='gc_over')
+
+        over_filtered = impact[impact['over'] == sel_over]
+
+        if over_filtered.empty:
+            st.info(f"No batter has scored {run_threshold}+ runs in Over {sel_over} with current filters.")
+        else:
+            # Total times each batter batted in this specific over
+            over_total = over_data[over_data['over'] == sel_over].groupby('bat').agg(
+                Total_Times_Batted=('over_runs','count')
+            ).reset_index()
+
+            over_lb = over_filtered.groupby('bat').agg(
+                Impact_Overs=('over_runs','count'),
+                Total_Runs  =('over_runs','sum'),
+                Best_Over   =('over_runs','max'),
+                Avg_Runs    =('over_runs','mean')
+            ).reset_index()
+
+            over_lb = pd.merge(over_lb, over_total, on='bat', how='left')
+            over_lb['Impact_Freq%'] = (over_lb['Impact_Overs'] / over_lb['Total_Times_Batted'] * 100).round(1)
+            over_lb['Avg_Runs'] = over_lb['Avg_Runs'].round(1)
+            over_lb = over_lb.sort_values('Impact_Overs', ascending=False).reset_index(drop=True)
+            over_lb.index += 1
+
+            col_ov1, col_ov2 = st.columns([1.2, 1])
+            with col_ov1:
+                fig_ov1 = px.bar(
+                    over_lb.head(15), x='bat', y='Impact_Overs',
+                    color='Impact_Overs', color_continuous_scale='Plasma',
+                    text='Impact_Overs',
+                    title=f"Over {sel_over} – Most Impact Overs (Top 15)",
+                    height=420
+                )
+                fig_ov1.update_layout(xaxis_tickangle=-40)
+                st.plotly_chart(fig_ov1, use_container_width=True)
+
+            with col_ov2:
+                fig_ov2 = px.bar(
+                    over_lb.sort_values('Impact_Freq%', ascending=False).head(15),
+                    x='bat', y='Impact_Freq%',
+                    color='Impact_Freq%', color_continuous_scale='RdYlGn',
+                    text='Impact_Freq%',
+                    title=f"Over {sel_over} – Highest Impact Freq% (Top 15)",
+                    height=420
+                )
+                fig_ov2.update_layout(xaxis_tickangle=-40)
+                st.plotly_chart(fig_ov2, use_container_width=True)
+
+            st.markdown(f"**Full Ranked List – Over {sel_over}**")
+            st.dataframe(
+                over_lb[['bat','Impact_Overs','Total_Times_Batted','Impact_Freq%','Total_Runs','Best_Over','Avg_Runs']],
+                use_container_width=True
+            )
+
+        st.divider()
+
         # ── Individual batter impact profile ──
         st.markdown("### 🔍 Individual Batter Impact Profile")
         sel_gc = st.selectbox("Select Batter", sorted(impact['bat'].unique()), key='gc_bat')
