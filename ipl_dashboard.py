@@ -689,17 +689,17 @@ with tab7:
         # ── Phase-wise Game Changers (CHART + FULL LIST) ──
         st.markdown("### 📊 Game Changers by Phase")
         for ph_name, color in zip(
-            ['Powerplay (1-6)', 'Middle (7-16)', 'Death (17-20)'],
+            ['Powerplay (1–6)', 'Middle (7–16)', 'Death (17–20)'],
             ['Teal', 'Oranges', 'Purples']
         ):
             st.markdown(f"#### 🏏 {ph_name}")
 
             # Build phase total overs for frequency
-            phase_total_overs = over_data[over_data['phase']==ph_name].groupby('bat').agg(
+            phase_total_overs = over_data[over_data['phase'].astype(str)==ph_name].groupby('bat').agg(
                 Total_Overs_Batted=('over_runs','count')
             ).reset_index()
 
-            ph_lb = impact[impact['phase']==ph_name].groupby('bat').agg(
+            ph_lb = impact[impact['phase'].astype(str)==ph_name].groupby('bat').agg(
                 Impact_Overs=('over_runs','count'),
                 Total_Runs  =('over_runs','sum'),
                 Best_Over   =('over_runs','max'),
