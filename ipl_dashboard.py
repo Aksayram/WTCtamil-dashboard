@@ -662,77 +662,84 @@ with tab7:
             st.dataframe(spin_lb[['bat','Impact_Overs','Total_Overs_Batted','Impact_Freq%','Total_Runs','Best_Over']],
                          use_container_width=True)
 
+        # ── Impact Frequency % Chart (Overall) ──
         st.divider()
-
-        # ── Phase-wise Game Changers (FULL LIST) ──
-        st.markdown("### 📊 Game Changers by Phase – Full List")
-        col5, col6, col7 = st.columns(3)
-        for col, ph_name, color in zip(
-            [col5, col6, col7],
-            ['Powerplay (1-6)', 'Middle (7-16)', 'Death (17-20)'],
-            ['Teal', 'Oranges', 'Purples']
-        ):
-            with col:
-                ph_lb = impact[impact['phase']==ph_name].groupby('bat').agg(
-                    Impact_Overs=('over_runs','count'),
-                    Total_Runs  =('over_runs','sum'),
-                    Best_Over   =('over_runs','max'),
-                    Avg_Runs    =('over_runs','mean')
-                ).reset_index().sort_values('Impact_Overs', ascending=False).reset_index(drop=True)
-                ph_lb = add_freq(ph_lb)
-                ph_lb.index += 1
-                ph_lb['Avg_Runs'] = ph_lb['Avg_Runs'].round(1)
-                st.markdown(f"**{ph_name}**")
-                st.dataframe(
-                    ph_lb[['bat','Impact_Overs','Total_Overs_Batted','Impact_Freq%','Total_Runs','Best_Over','Avg_Runs']],
-                    use_container_width=True,
-                    height=400
-                )
-
-        st.divider()
-
-        # ── Impact Frequency % ──
-        st.markdown("### 🎯 Impact Frequency % – Who is the Most Consistent Game Changer?")
+        st.markdown("### 🎯 Impact Frequency % – Most Consistent Game Changers")
         st.caption("Impact Frequency = (10+ run overs) ÷ (Total overs batted) × 100")
-
-        # Total overs batted per batter
-        total_overs = over_data.groupby('bat').agg(
-            Total_Overs_Batted=('over_runs','count')
-        ).reset_index()
-
-        # Impact overs per batter
-        impact_overs = impact.groupby('bat').agg(
-            Impact_Overs=('over_runs','count'),
-            Total_Runs  =('over_runs','sum'),
-            Best_Over   =('over_runs','max'),
-            Avg_Runs    =('over_runs','mean')
-        ).reset_index()
-
-        # Merge and calculate frequency
-        freq_df = pd.merge(impact_overs, total_overs, on='bat', how='left')
-        freq_df['Impact_Freq%'] = (freq_df['Impact_Overs'] / freq_df['Total_Overs_Batted'] * 100).round(1)
-        freq_df['Avg_Runs'] = freq_df['Avg_Runs'].round(1)
-        freq_df = freq_df.sort_values('Impact_Freq%', ascending=False).reset_index(drop=True)
-        freq_df.index += 1
-
+        freq_df = overall.sort_values('Impact_Freq%', ascending=False).reset_index(drop=True)
         col_f1, col_f2 = st.columns([1.2, 1])
         with col_f1:
             fig_freq = px.bar(
                 freq_df.head(15), x='bat', y='Impact_Freq%',
                 color='Impact_Freq%', color_continuous_scale='RdYlGn',
                 text='Impact_Freq%',
-                title=f"Top 15 – Highest Impact Frequency %", height=420
+                title="Top 15 – Highest Impact Frequency %", height=420
             )
             fig_freq.update_layout(xaxis_tickangle=-40)
             st.plotly_chart(fig_freq, use_container_width=True)
-
         with col_f2:
             st.markdown("**Full Impact Frequency Table**")
             st.dataframe(
                 freq_df[['bat','Impact_Freq%','Impact_Overs','Total_Overs_Batted','Total_Runs','Best_Over','Avg_Runs']],
-                use_container_width=True,
-                height=400
+                use_container_width=True, height=400
             )
+
+        st.divider()
+
+        # ── Phase-wise Game Changers (CHART + FULL LIST) ──
+        st.markdown("### 📊 Game Changers by Phase")
+        for ph_name, color in zip(
+            ['Powerplay (1-6)', 'Middle (7-16)', 'Death (17-20)'],
+            ['Teal', 'Oranges', 'Purples']
+        ):
+            st.markdown(f"#### 🏏 {ph_name}")
+
+            # Build phase total overs for frequency
+            phase_total_overs = over_data[over_data['phase']==ph_name].groupby('bat').agg(
+                Total_Overs_Batted=('over_runs','count')
+            ).reset_index()
+
+            ph_lb = impact[impact['phase']==ph_name].groupby('bat').agg(
+                Impact_Overs=('over_runs','count'),
+                Total_Runs  =('over_runs','sum'),
+                Best_Over   =('over_runs','max'),
+                Avg_Runs    =('over_runs','mean')
+            ).reset_index().sort_values('Impact_Overs', ascending=False).reset_index(drop=True)
+
+            # Use phase-specific total overs for frequency
+            ph_lb = pd.merge(ph_lb, phase_total_overs, on='bat', how='left')
+            ph_lb['Impact_Freq%'] = (ph_lb['Impact_Overs'] / ph_lb['Total_Overs_Batted'] * 100).round(1)
+            ph_lb['Avg_Runs'] = ph_lb['Avg_Runs'].round(1)
+
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                fig_ph1 = px.bar(
+                    ph_lb.head(15), x='bat', y='Impact_Overs',
+                    color='Impact_Overs', color_continuous_scale=color,
+                    text='Impact_Overs',
+                    title=f"Most Impact Overs – {ph_name}", height=380
+                )
+                fig_ph1.update_layout(xaxis_tickangle=-40)
+                st.plotly_chart(fig_ph1, use_container_width=True)
+
+            with col_b:
+                fig_ph2 = px.bar(
+                    ph_lb.sort_values('Impact_Freq%', ascending=False).head(15),
+                    x='bat', y='Impact_Freq%',
+                    color='Impact_Freq%', color_continuous_scale='RdYlGn',
+                    text='Impact_Freq%',
+                    title=f"Highest Impact Freq% – {ph_name}", height=380
+                )
+                fig_ph2.update_layout(xaxis_tickangle=-40)
+                st.plotly_chart(fig_ph2, use_container_width=True)
+
+            with col_c:
+                st.markdown(f"**Full List – {ph_name}**")
+                ph_lb.index = ph_lb.index + 1
+                st.dataframe(
+                    ph_lb[['bat','Impact_Overs','Total_Overs_Batted','Impact_Freq%','Total_Runs','Best_Over','Avg_Runs']],
+                    use_container_width=True, height=380
+                )
 
         st.divider()
 
@@ -741,11 +748,16 @@ with tab7:
         sel_gc = st.selectbox("Select Batter", sorted(impact['bat'].unique()), key='gc_bat')
         bat_impact = impact[impact['bat']==sel_gc]
 
-        gc1, gc2, gc3, gc4 = st.columns(4)
+        # Calculate Impact Freq% for selected batter
+        bat_total_overs = over_data[over_data['bat']==sel_gc].shape[0]
+        bat_impact_freq = (len(bat_impact) / bat_total_overs * 100) if bat_total_overs > 0 else 0
+
+        gc1, gc2, gc3, gc4, gc5 = st.columns(5)
         gc1.metric("Total Impact Overs", len(bat_impact))
-        gc2.metric("Best Over", int(bat_impact['over_runs'].max()))
-        gc3.metric("Avg Runs in Impact Over", f"{bat_impact['over_runs'].mean():.1f}")
-        gc4.metric("Total Runs in Impact Overs", int(bat_impact['over_runs'].sum()))
+        gc2.metric("Total Overs Batted", bat_total_overs)
+        gc3.metric("Impact Freq%", f"{bat_impact_freq:.1f}%")
+        gc4.metric("Best Over", int(bat_impact['over_runs'].max()))
+        gc5.metric("Total Runs in Impact Overs", int(bat_impact['over_runs'].sum()))
 
         col8, col9 = st.columns(2)
         with col8:
