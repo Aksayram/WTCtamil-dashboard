@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from io import BytesIO
 
 st.set_page_config(
     page_title="IPL Momentum Dashboard",
@@ -37,9 +38,12 @@ TEAM_COLORS = {
 
 @st.cache_data
 def load_excel(file_bytes):
-    match_df   = pd.read_excel(file_bytes, sheet_name="Match Results")
-    detail_df  = pd.read_excel(file_bytes, sheet_name="Full Detail")
-    summary_df = pd.read_excel(file_bytes, sheet_name="Season Summary")
+    buf = BytesIO(file_bytes)
+    match_df   = pd.read_excel(buf, sheet_name="Match Results")
+    buf.seek(0)
+    detail_df  = pd.read_excel(buf, sheet_name="Full Detail")
+    buf.seek(0)
+    summary_df = pd.read_excel(buf, sheet_name="Season Summary")
     match_df["Season"]  = match_df["Season"].astype(int)
     detail_df["Season"] = detail_df["Season"].astype(int)
     return match_df, detail_df, summary_df
