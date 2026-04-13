@@ -13,18 +13,34 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 1.2rem; padding-bottom: 1rem; }
+    /* Push content below Streamlit Cloud toolbar */
+    .block-container {
+        padding-top: 3.5rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+    header[data-testid="stHeader"] {
+        background-color: #ffffff !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+    }
     h1 { font-size: 2rem !important; font-weight: 700 !important; }
 
     /* ── Fix invisible tab labels ── */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px !important;
+        background-color: #e2e8f0 !important;
+        padding: 6px 6px 0 6px !important;
+        border-radius: 10px 10px 0 0 !important;
+    }
     .stTabs [data-baseweb="tab"] {
-        color: #1e293b !important;
-        background-color: #f1f5f9 !important;
+        color: #334155 !important;
+        background-color: #e2e8f0 !important;
         border-radius: 8px 8px 0 0 !important;
-        padding: 8px 20px !important;
+        padding: 10px 24px !important;
         font-weight: 600 !important;
         font-size: 14px !important;
+        border: none !important;
     }
     .stTabs [aria-selected="true"] {
         color: #ffffff !important;
@@ -33,7 +49,10 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab"]:hover {
         color: #1e3a5f !important;
-        background-color: #e2e8f0 !important;
+        background-color: #cbd5e1 !important;
+    }
+    .stTabs [data-baseweb="tab-panel"] {
+        padding-top: 1rem !important;
     }
 
     .metric-card {
@@ -125,7 +144,7 @@ if not sel_teams:
     st.stop()
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["📊  Momentum Analysis", "💥  Bounce Back Analysis", "🪣  Bucket Analysis"])
+tab1, tab2, tab3 = st.tabs(["📊  Momentum Analysis", "💥  Bounce Back Analysis", "📈  Phase Performance Index"])
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -395,8 +414,8 @@ with tab2:
 # TAB 3 — Bucket Analysis
 # ════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.title("🪣 Bucket Analysis")
-    st.caption("14 games split into 5 buckets of 3-3-3-3-2 — see how teams perform in each phase of the season.")
+    st.title("📈 Phase Performance Index")
+    st.caption("14 league games divided into 5 phases (M1–M3, M4–M6, M7–M9, M10–M12, M13–M14) — track win% across each phase to identify when teams peak or decline.")
 
     bk_col1, bk_col2 = st.columns([2,1])
     with bk_col1:
