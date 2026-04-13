@@ -205,7 +205,7 @@ with tab1:
             for _, row in stats_df.iterrows():
                 color = TEAM_COLORS.get(row["team"], "#888")
                 fig_line.add_trace(go.Scatter(x=[f"M{i+1}" for i in range(14)], y=row["cumulative"],
-                    name=row["team"], mode="lines+markers", connectgaps=True,
+                    name=row["team"], mode="lines+markers+text", connectgaps=True,
                     line=dict(color=color, width=2.5),
                     marker=dict(size=6, color=color, line=dict(width=1.5, color="white")),
                     hovertemplate=f"<b>{row['team']}</b>  %{{x}}: %{{y}}%<extra></extra>"))
@@ -455,12 +455,12 @@ with tab3:
             y_vals = [row[b["label"]] for b in BUCKETS]
             fig_bk_line.add_trace(go.Scatter(
                 x=bucket_short, y=y_vals, name=team,
-                mode="lines+markers", connectgaps=True,
+                mode="lines+markers+text", connectgaps=True,
                 line=dict(color=color, width=2.5),
                 marker=dict(size=8, color=color, line=dict(width=2, color="white")),
                 hovertemplate=f"<b>{team}</b>  %{{x}}: %{{y}}%<extra></extra>",
                 text=[f"{v}%" if v is not None else "" for v in y_vals],
-                textposition="top center", mode="lines+markers+text",
+                textposition="top center",
                 textfont=dict(size=10, color=color),
             ))
         fig_bk_line.add_hline(y=50, line_dash="dot", line_color="rgba(100,100,100,0.3)",
