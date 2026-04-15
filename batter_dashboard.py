@@ -154,10 +154,12 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.subheader("Batter Leaderboard by Phase")
 
-    phase_sel = st.radio("Select Phase", phase_opts, horizontal=True)
+    phase_sel = st.radio("Select Phase", ["Overall"] + phase_opts, horizontal=True)
     metric_sel = st.radio("Rank by", ["SR", "Runs", "Avg"], horizontal=True)
 
-    phase_df = dff[dff['Phase'] == phase_sel]
+    # Use all data for Overall, otherwise filter by phase
+    phase_df = dff if phase_sel == "Overall" else dff[dff['Phase'] == phase_sel]
+
     if phase_df.empty:
         st.warning("No data for this phase with current filters.")
     else:
@@ -165,21 +167,87 @@ with tab1:
         lb = lb[lb['Balls'] >= min_balls].sort_values(metric_sel, ascending=False).reset_index(drop=True)
         lb.index += 1
 
-        col1, col2 = st.columns([1.2, 1])
+        if phase_sel == "Overall":
+            st.markdown("#### 🏏 Overall – All Phases Combined")
+            col1, col2 = st.columns([1.2, 1])
+            with col1:
+                top_n = st.slider("Show top N batters", 5, min(30, len(lb)), min(10, len(lb)))
+                fig = px.bar(
+                    lb.head(top_n), x='Batter', y=metric_sel,
+                    color=metric_sel, color_continuous_scale='Teal',
+                    text=metric_sel,
+                    title=f"Top {top_n} Batters – Overall – Ranked by {metric_sel}",
+                    height=450
+                )
+                fig.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.markdown("**Full Overall Leaderboard**")
+                st.dataframe(lb[['Batter','Balls','Runs','SR','Avg','Dismissals']],
+                             use_container_width=True, height=420)
 
-        with col1:
-            top_n = st.slider("Show top N batters", 5, min(30, len(lb)), min(10, len(lb)))
-            fig = px.bar(
-                lb.head(top_n), x='Batter', y=metric_sel,
-                color=metric_sel, color_continuous_scale='Teal',
-                text=metric_sel,
-                title=f"Top {top_n} Batters – {phase_sel} – Ranked by {metric_sel}",
-                height=450
-            )
-            fig.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
+            st.divider()
 
-        with col2:
+            # Best batter vs Pacer overall
+            st.markdown("#### ⚡ Best Batters vs Pacer (All Phases)")
+            pace_df = dff[dff['Type'] == 'Pacer']
+            pace_lb = batter_stats(pace_df, ['Batter'])
+            pace_lb = pace_lb[pace_lb['Balls'] >= min_balls].sort_values(metric_sel, ascending=False).reset_index(drop=True)
+            pace_lb.index += 1
+            col3, col4 = st.columns([1.2, 1])
+            with col3:
+                fig_p = px.bar(
+                    pace_lb.head(top_n), x='Batter', y=metric_sel,
+                    color=metric_sel, color_continuous_scale='Reds',
+                    text=metric_sel,
+                    title=f"Top {top_n} Batters vs Pacer – Ranked by {metric_sel}",
+                    height=420
+                )
+                fig_p.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_p, use_container_width=True)
+            with col4:
+                st.markdown("**Full Pacer Leaderboard**")
+                st.dataframe(pace_lb[['Batter','Balls','Runs','SR','Avg','Dismissals']],
+                             use_container_width=True, height=400)
+
+            st.divider()
+
+            # Best batter vs Spinner overall
+            st.markdown("#### 🌀 Best Batters vs Spinner (All Phases)")
+            spin_df = dff[dff['Type'] == 'Spinner']
+            spin_lb = batter_stats(spin_df, ['Batter'])
+            spin_lb = spin_lb[spin_lb['Balls'] >= min_balls].sort_values(metric_sel, ascending=False).reset_index(drop=True)
+            spin_lb.index += 1
+            col5, col6 = st.columns([1.2, 1])
+            with col5:
+                fig_s = px.bar(
+                    spin_lb.head(top_n), x='Batter', y=metric_sel,
+                    color=metric_sel, color_continuous_scale='Blues',
+                    text=metric_sel,
+                    title=f"Top {top_n} Batters vs Spinner – Ranked by {metric_sel}",
+                    height=420
+                )
+                fig_s.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_s, use_container_width=True)
+            with col6:
+                st.markdown("**Full Spinner Leaderboard**")
+                st.dataframe(spin_lb[['Batter','Balls','Runs','SR','Avg','Dismissals']],
+                             use_container_width=True, height=400)
+
+        else:
+            col1, col2 = st.columns([1.2, 1])
+            with col1:
+                top_n = st.slider("Show top N batters", 5, min(30, len(lb)), min(10, len(lb)))
+                fig = px.bar(
+                    lb.head(top_n), x='Batter', y=metric_sel,
+                    color=metric_sel, color_continuous_scale='Teal',
+                    text=metric_sel,
+                    title=f"Top {top_n} Batters – {phase_sel} – Ranked by {metric_sel}",
+                    height=450
+                )
+                fig.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
             st.markdown(f"**Full Leaderboard – {phase_sel}**")
             st.dataframe(
                 lb[['Batter','Balls','Runs','SR','Avg','Dismissals']],
