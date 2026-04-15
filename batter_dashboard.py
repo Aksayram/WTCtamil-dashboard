@@ -248,11 +248,11 @@ with tab1:
                 fig.update_layout(xaxis_tickangle=-45)
                 st.plotly_chart(fig, use_container_width=True)
             with col2:
-            st.markdown(f"**Full Leaderboard – {phase_sel}**")
-            st.dataframe(
-                lb[['Batter','Balls','Runs','SR','Avg','Dismissals']],
-                use_container_width=True, height=420
-            )
+                st.markdown(f"**Full Leaderboard – {phase_sel}**")
+                st.dataframe(
+                    lb[['Batter','Balls','Runs','SR','Avg','Dismissals']],
+                    use_container_width=True, height=420
+                )
 
     st.divider()
     st.subheader("Phase-wise SR Comparison (all phases)")
