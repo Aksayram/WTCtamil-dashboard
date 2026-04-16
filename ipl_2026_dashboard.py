@@ -195,6 +195,31 @@ with tab1:
     st.plotly_chart(fig5, use_container_width=True)
     st.dataframe(shot_grp.sort_values('Avg Runs',ascending=False).reset_index(drop=True), use_container_width=True)
 
+    st.divider()
+    st.subheader("🔍 Who Plays a Specific Shot Best?")
+    shot_opts = sorted(shot_df['shot_label'].dropna().unique())
+    sel_shot  = st.selectbox("Select a Shot", shot_opts)
+    shot_bat_grp = shot_df[shot_df['shot_label']==sel_shot].groupby('bat').agg(
+        Balls=('batruns','count'), Runs=('batruns','sum'), Outs=('out','sum')
+    ).reset_index()
+    shot_bat_grp = shot_bat_grp[shot_bat_grp['Balls'] >= 3]
+    total_sb = shot_bat_grp['Balls'].sum()
+    shot_bat_grp['SR']         = (shot_bat_grp['Runs']/shot_bat_grp['Balls']*100).round(1)
+    shot_bat_grp['Avg']        = (shot_bat_grp['Runs']/shot_bat_grp['Outs'].replace(0,np.nan)).round(1).fillna(shot_bat_grp['Runs'])
+    shot_bat_grp['Frequency%'] = (shot_bat_grp['Balls']/max(total_sb,1)*100).round(1)
+    shot_bat_grp = shot_bat_grp.sort_values('Runs',ascending=False).reset_index(drop=True)
+    shot_bat_grp.index += 1
+    sb1,sb2 = st.columns([1.2,1])
+    with sb1:
+        fig_sb = px.bar(shot_bat_grp.head(15), x='bat', y='Runs',
+                        color='SR', color_continuous_scale='RdYlGn',
+                        text='Runs', title=f"Who Hits '{sel_shot}' Most? (color=SR)", height=420)
+        fig_sb.update_layout(xaxis_tickangle=-40)
+        st.plotly_chart(fig_sb, use_container_width=True)
+    with sb2:
+        st.markdown(f"**Full List – {sel_shot}**")
+        st.dataframe(shot_bat_grp[['bat','Balls','Runs','SR','Avg','Frequency%']], use_container_width=True, height=400)
+
 # ══ TAB 2 — Line & Length ═════════════════════════════════════════════════════
 with tab2:
     st.subheader("Line & Length Analysis")
@@ -241,6 +266,33 @@ with tab2:
                   title="SR by Length Across Phases", height=400)
     fig5.update_layout(xaxis_tickangle=-20)
     st.plotly_chart(fig5, use_container_width=True)
+
+    st.divider()
+    st.subheader("🔍 Bowler Performance by Length")
+    len_opts   = sorted(ll['length_label'].dropna().unique())
+    total_ll_balls = len(ll)
+    sel_len    = st.selectbox("Select a Length", len_opts)
+    len_bowl   = ll[ll['length_label']==sel_len].groupby('bowl').agg(
+        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('out','sum')
+    ).reset_index()
+    len_bowl = len_bowl[len_bowl['Balls'] >= 5]
+    len_total_balls = len_bowl['Balls'].sum()
+    len_bowl['Economy']  = (len_bowl['Runs']/(len_bowl['Balls']/6)).round(2)
+    len_bowl['Avg']      = (len_bowl['Runs']/len_bowl['Wickets'].replace(0,np.nan)).round(1)
+    len_bowl['Balls%']   = (len_bowl['Balls']/max(len_total_balls,1)*100).round(1)
+    len_bowl = len_bowl.sort_values('Economy',ascending=True).reset_index(drop=True)
+    len_bowl.index += 1
+
+    lb1,lb2 = st.columns([1.2,1])
+    with lb1:
+        fig_lb = px.bar(len_bowl.head(15), x='bowl', y='Economy',
+                        color='Economy', color_continuous_scale='RdYlGn_r',
+                        text='Economy', title=f"Best Economy at '{sel_len}'", height=420)
+        fig_lb.update_layout(xaxis_tickangle=-40)
+        st.plotly_chart(fig_lb, use_container_width=True)
+    with lb2:
+        st.markdown(f"**Full Bowler List at {sel_len}**")
+        st.dataframe(len_bowl[['bowl','Balls','Balls%','Runs','Economy','Wickets','Avg']], use_container_width=True, height=400)
 
 # ══ TAB 3 — Batter Analysis ═══════════════════════════════════════════════════
 with tab3:
@@ -445,6 +497,31 @@ with tab4:
     st.dataframe(bowl_grp.sort_values('Dot%',ascending=False).reset_index(drop=True)
                  [['bowl','Balls','Runs','Wickets','Economy','SR','Avg','Dot%','Dots']],
                  use_container_width=True)
+
+    st.divider()
+    st.subheader("🎯 Best Bowlers vs Left Hand / Right Hand Batters")
+    hand_sel = st.radio("Select Batter Hand", ['LHB','RHB'], horizontal=True, key='hand_sel')
+    hand_df  = dff_bowl[dff_bowl['bat_hand']==hand_sel]
+    hand_grp = hand_df.groupby('bowl').agg(
+        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('out','sum'), Dots=('is_dot','sum')
+    ).reset_index()
+    hand_grp = hand_grp[hand_grp['Balls'] >= min_balls]
+    hand_grp['Economy'] = (hand_grp['Runs']/(hand_grp['Balls']/6)).round(2)
+    hand_grp['Avg']     = (hand_grp['Runs']/hand_grp['Wickets'].replace(0,np.nan)).round(1)
+    hand_grp['Dot%']    = (hand_grp['Dots']/hand_grp['Balls']*100).round(1)
+    hand_grp = hand_grp.sort_values('Economy',ascending=True).reset_index(drop=True)
+    hand_grp.index += 1
+
+    hb1,hb2 = st.columns([1.2,1])
+    with hb1:
+        fig_hb = px.bar(hand_grp.head(15), x='bowl', y='Economy',
+                        color='Economy', color_continuous_scale='RdYlGn_r',
+                        text='Economy', title=f"Best Bowlers vs {hand_sel} (Economy)", height=420)
+        fig_hb.update_layout(xaxis_tickangle=-40)
+        st.plotly_chart(fig_hb, use_container_width=True)
+    with hb2:
+        st.markdown(f"**Full list vs {hand_sel}**")
+        st.dataframe(hand_grp[['bowl','Balls','Runs','Economy','Wickets','Avg','Dot%']], use_container_width=True, height=400)
 
     st.divider()
     st.subheader("🔍 Individual Bowler Deep Dive")
@@ -1082,31 +1159,57 @@ with tab7:
         st.plotly_chart(fig_dot, use_container_width=True)
 
         st.divider()
-        # Phase-wise
+        # Phase-wise — only Strict comeback by phase
         st.markdown("### 📊 Phase-wise Resilience")
         ph_res = bad.groupby(['bowl','phase'],observed=True).agg(
             Bad_Starts=('first3_runs','count'),
             Strict=('Strict','sum'), Good=('Good','sum'), Blown=('Blown','sum')
         ).reset_index()
         ph_res['Strict%'] = (ph_res['Strict']/ph_res['Bad_Starts']*100).round(1)
-        ph_res['Blown%']  = (ph_res['Blown']/ph_res['Bad_Starts']*100).round(1)
         top10_r = res.head(10)['bowl'].tolist()
 
-        cp1,cp2 = st.columns(2)
-        with cp1:
-            fig_pr1 = px.bar(ph_res[ph_res['bowl'].isin(top10_r)],
-                             x='bowl', y='Strict%', color='phase', barmode='group',
-                             color_discrete_map={'Powerplay (1-6)':'#636EFA','Middle (7-16)':'#EF553B','Death (17-20)':'#00CC96'},
-                             title="Strict Comeback% by Phase – Top 10", height=400)
-            fig_pr1.update_layout(xaxis_tickangle=-40)
-            st.plotly_chart(fig_pr1, use_container_width=True)
-        with cp2:
-            fig_pr2 = px.bar(ph_res[ph_res['bowl'].isin(top10_r)],
-                             x='bowl', y='Blown%', color='phase', barmode='group',
-                             color_discrete_map={'Powerplay (1-6)':'#636EFA','Middle (7-16)':'#EF553B','Death (17-20)':'#00CC96'},
-                             title="Blown It% by Phase – Top 10", height=400)
-            fig_pr2.update_layout(xaxis_tickangle=-40)
-            st.plotly_chart(fig_pr2, use_container_width=True)
+        fig_pr1 = px.bar(ph_res[ph_res['bowl'].isin(top10_r)],
+                         x='bowl', y='Strict%', color='phase', barmode='group',
+                         color_discrete_map={'Powerplay (1-6)':'#636EFA','Middle (7-16)':'#EF553B','Death (17-20)':'#00CC96'},
+                         title="Strict Comeback% by Phase – Top 10", height=400)
+        fig_pr1.update_layout(xaxis_tickangle=-40)
+        st.plotly_chart(fig_pr1, use_container_width=True)
+
+        st.divider()
+        # Team resilience leaderboard
+        st.markdown("### 🏆 Team Resilience Leaderboard")
+        st.caption("Which team's bowlers bounce back best after a bad start?")
+        team_res = bad.groupby('bowl').agg(
+            Bad_Starts=('first3_runs','count'),
+            Strict=('Strict','sum'), Good=('Good','sum'), Blown=('Blown','sum'),
+            Dot_Pct=('Last3_Dot%','mean'), Boundary_Pct=('Last3_Boundary%','mean')
+        ).reset_index()
+        # Map bowler to team
+        bowl_team_map = dff[['bowl','team_bowl']].drop_duplicates().set_index('bowl')['team_bowl']
+        team_res['team'] = team_res['bowl'].map(bowl_team_map)
+        team_res_grp = team_res.groupby('team').agg(
+            Bad_Starts=('Bad_Starts','sum'),
+            Strict=('Strict','sum'), Good=('Good','sum'), Blown=('Blown','sum'),
+            Dot_Pct=('Dot_Pct','mean'), Boundary_Pct=('Boundary_Pct','mean')
+        ).reset_index()
+        team_res_grp['Strict%']      = (team_res_grp['Strict']/team_res_grp['Bad_Starts']*100).round(1)
+        team_res_grp['Good%']        = (team_res_grp['Good']/team_res_grp['Bad_Starts']*100).round(1)
+        team_res_grp['Blown%']       = (team_res_grp['Blown']/team_res_grp['Bad_Starts']*100).round(1)
+        team_res_grp['Dot_Pct']      = team_res_grp['Dot_Pct'].round(1)
+        team_res_grp['Boundary_Pct'] = team_res_grp['Boundary_Pct'].round(1)
+        team_res_grp = team_res_grp.sort_values('Strict%',ascending=False).reset_index(drop=True)
+        team_res_grp.index += 1
+
+        tr1,tr2 = st.columns([1.2,1])
+        with tr1:
+            fig_tr = px.bar(team_res_grp, x='team', y='Strict%',
+                            color='Strict%', color_continuous_scale='RdYlGn',
+                            text='Strict%', title="Team – Strict Comeback% (Bowlers)", height=400)
+            fig_tr.update_layout(xaxis_tickangle=-30)
+            st.plotly_chart(fig_tr, use_container_width=True)
+        with tr2:
+            st.dataframe(team_res_grp[['team','Bad_Starts','Strict%','Good%','Blown%','Dot_Pct','Boundary_Pct']],
+                         use_container_width=True, height=380)
 
         st.divider()
         # Individual bowler
@@ -1220,31 +1323,30 @@ with tab7:
                              use_container_width=True, height=380)
 
             st.divider()
-            # Acceleration chart: SR first 6 vs SR balls 7-12
-            st.markdown("### 📈 Settling vs Acceleration (SR: First 6 balls vs Balls 7–12)")
-            acc = pw.groupby('bat').agg(
-                Runs_1_6 =('runs_1_6','sum'), Balls_1_6=('balls_1_6','sum'),
-                Runs_7_12=('runs_7_12','sum'), Balls_7_12=('balls_7_12','sum'),
-                Times=('runs','count')
+            # Team post-wicket leaderboard
+            st.markdown("### 🏆 Team Post-Wicket Leaderboard")
+            st.caption("Which team's batters score best after a wicket falls?")
+            # Need team info — merge from df
+            bat_team_map = dff[['bat','team_bat']].drop_duplicates().set_index('bat')['team_bat']
+            pw['team'] = pw['bat'].map(bat_team_map)
+            team_pw = pw.groupby('team').agg(
+                Times=('runs','count'), Total_Runs=('runs','sum'),
+                Total_Balls=('balls','sum'), Fours=('fours','sum'), Sixes=('sixes','sum')
             ).reset_index()
-            acc = acc[acc['Times'] >= 2]
-            acc['SR_1_6']  = (acc['Runs_1_6']/acc['Balls_1_6'].replace(0,np.nan)*100).round(1)
-            acc['SR_7_12'] = (acc['Runs_7_12']/acc['Balls_7_12'].replace(0,np.nan)*100).round(1)
-            acc = acc.dropna(subset=['SR_1_6','SR_7_12'])
-            acc = acc.sort_values('SR_1_6',ascending=False)
+            team_pw['SR']  = (team_pw['Total_Runs']/team_pw['Total_Balls']*100).round(1)
+            team_pw = team_pw.sort_values('SR',ascending=False).reset_index(drop=True)
+            team_pw.index += 1
 
-            acc_melt = acc.melt(id_vars='bat', value_vars=['SR_1_6','SR_7_12'],
-                                var_name='Phase', value_name='SR')
-            acc_melt['Phase'] = acc_melt['Phase'].map({'SR_1_6':'First 6 Balls','SR_7_12':'Balls 7–12'})
-
-            fig_acc = px.bar(acc_melt[acc_melt['bat'].isin(pw_lb.head(15)['bat'])],
-                             x='bat', y='SR', color='Phase', barmode='group',
-                             color_discrete_map={'First 6 Balls':'#636EFA','Balls 7–12':'#00CC96'},
-                             title="Post-Wicket: SR in First 6 Balls vs Balls 7–12 (Top 15)",
-                             height=420, text='SR')
-            fig_acc.update_layout(xaxis_tickangle=-40)
-            st.plotly_chart(fig_acc, use_container_width=True)
-            st.caption("Higher SR in 'Balls 7–12' than 'First 6 Balls' = batter accelerates after settling in")
+            tp1,tp2 = st.columns([1.2,1])
+            with tp1:
+                fig_tp = px.bar(team_pw, x='team', y='SR',
+                                color='SR', color_continuous_scale='RdYlGn',
+                                text='SR', title=f"Team SR in First {pw_n} Balls Post-Wicket", height=400)
+                fig_tp.update_layout(xaxis_tickangle=-30)
+                st.plotly_chart(fig_tp, use_container_width=True)
+            with tp2:
+                st.dataframe(team_pw[['team','Times','Total_Balls','Total_Runs','SR','Fours','Sixes']],
+                             use_container_width=True, height=380)
 
             st.divider()
             st.markdown("### 🔍 Individual Post-Wicket Profile")
@@ -1266,17 +1368,9 @@ with tab7:
                                  title=f"{sel_pw} – Post-Wicket SR by Phase", height=320)
                 st.plotly_chart(fig_pi1, use_container_width=True)
             with pi2:
-                # Individual acceleration
-                ind_acc = pw_bat[['runs_1_6','balls_1_6','runs_7_12','balls_7_12']].sum()
-                sr_16  = round(ind_acc['runs_1_6']/max(ind_acc['balls_1_6'],1)*100,1)
-                sr_712 = round(ind_acc['runs_7_12']/max(ind_acc['balls_7_12'],1)*100,1)
-                acc_ind = pd.DataFrame({
-                    'Phase':['First 6 Balls','Balls 7–12'],
-                    'SR':[sr_16, sr_712]
-                })
-                fig_pi2 = px.bar(acc_ind, x='Phase', y='SR', color='Phase',
-                                 color_discrete_map={'First 6 Balls':'#636EFA','Balls 7–12':'#00CC96'},
-                                 text='SR', title=f"{sel_pw} – Settling vs Acceleration", height=320)
+                fig_pi2 = px.histogram(pw_bat, x='SR', nbins=10,
+                                       title=f"{sel_pw} – Post-Wicket SR Distribution",
+                                       color_discrete_sequence=['#636EFA'], height=320)
                 st.plotly_chart(fig_pi2, use_container_width=True)
 
 # ── Raw Data ──────────────────────────────────────────────────────────────────
