@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import gc
 
 # ---------------- PASSWORD ----------------
 def check_password():
@@ -84,6 +85,19 @@ def load_data(path):
         'OB/LB':'Off/Leg Break','RM/OB':'Right Medium/Off Break'
     }
     df['bowl_style_label'] = df['bowl_style'].map(style_map).fillna(df['bowl_style'])
+
+    # ── Memory optimisation: downcast numerics & use categories ──────────────
+    for c in ['score','batruns','over','control','wagonX','wagonY','wagonZone','wprob']:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], downcast='float', errors='coerce')
+    for c in ['out','wide','noball','ball','is_dot','bowl_wicket','inns_wkts']:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], downcast='integer', errors='coerce')
+    for c in ['bat','bowl','team_bat','team_bowl','ground','shot','line','length',
+              'bowl_style','bowl_kind','bat_hand','dismissal',
+              'shot_label','line_label','length_label','bowl_style_label']:
+        if c in df.columns:
+            df[c] = df[c].astype('category')
     return df
 
 FILE = "IPL_2023_to_2025_Base_Data.xlsx"
@@ -126,6 +140,7 @@ filt = (
     df['team_bat'].isin(sel_team_bat)
 )
 dff = df[filt]
+gc.collect()  # free unused memory after filtering
 
 st.title("🏏 IPL Analytics Dashboard  |  2023 – 2025")
 st.caption(f"**{len(dff):,}** deliveries  |  **{dff['p_match'].nunique()}** matches  |  **{dff['bat'].nunique()}** batters  |  **{dff['bowl'].nunique()}** bowlers  |  **{dff['year'].nunique()}** years")
