@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
-import gc
 
 # ---------------- PASSWORD ----------------
 def check_password():
@@ -85,19 +84,6 @@ def load_data(path):
         'OB/LB':'Off/Leg Break','RM/OB':'Right Medium/Off Break'
     }
     df['bowl_style_label'] = df['bowl_style'].map(style_map).fillna(df['bowl_style'])
-
-    # ── Memory optimisation: downcast numerics & use categories ──────────────
-    for c in ['score','batruns','over','control','wagonX','wagonY','wagonZone','wprob']:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], downcast='float', errors='coerce')
-    for c in ['out','wide','noball','ball','is_dot','bowl_wicket','inns_wkts']:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], downcast='integer', errors='coerce')
-    for c in ['bat','bowl','team_bat','team_bowl','ground','shot','line','length',
-              'bowl_style','bowl_kind','bat_hand','dismissal',
-              'shot_label','line_label','length_label','bowl_style_label']:
-        if c in df.columns:
-            df[c] = df[c].astype('category')
     return df
 
 FILE = "IPL_2023_to_2025_Base_Data.xlsx"
@@ -140,7 +126,6 @@ filt = (
     df['team_bat'].isin(sel_team_bat)
 )
 dff = df[filt]
-gc.collect()  # free unused memory after filtering
 
 st.title("🏏 IPL Analytics Dashboard  |  2023 – 2025")
 st.caption(f"**{len(dff):,}** deliveries  |  **{dff['p_match'].nunique()}** matches  |  **{dff['bat'].nunique()}** batters  |  **{dff['bowl'].nunique()}** bowlers  |  **{dff['year'].nunique()}** years")
@@ -1275,8 +1260,8 @@ with tab8:
             Dot_Pct=('Last3_Dot%','mean'), Boundary_Pct=('Last3_Boundary%','mean')
         ).reset_index()
         # Map bowler to team
-        bowl_team_map = dff[['bowl','team_bowl']].drop_duplicates().set_index('bowl')['team_bowl']
-        team_res['team'] = team_res['bowl'].map(bowl_team_map)
+        bowl_team_map = dff.groupby('bowl')['team_bowl'].agg(lambda x: x.mode()[0]).to_dict()
+        team_res['team'] = team_res['bowl'].astype(str).map(bowl_team_map)
         team_res_grp = team_res.groupby('team').agg(
             Bad_Starts=('Bad_Starts','sum'),
             Strict=('Strict','sum'), Good=('Good','sum'), Blown=('Blown','sum'),
@@ -1417,8 +1402,8 @@ with tab8:
             st.markdown("### 🏆 Team Post-Wicket Leaderboard")
             st.caption("Which team's batters score best after a wicket falls?")
             # Need team info — merge from df
-            bat_team_map = dff[['bat','team_bat']].drop_duplicates().set_index('bat')['team_bat']
-            pw['team'] = pw['bat'].map(bat_team_map)
+            bat_team_map = dff.groupby('bat')['team_bat'].agg(lambda x: x.mode()[0]).to_dict()
+            pw['team'] = pw['bat'].astype(str).map(bat_team_map)
             team_pw = pw.groupby('team').agg(
                 Times=('runs','count'), Total_Runs=('runs','sum'),
                 Total_Balls=('balls','sum'), Fours=('fours','sum'), Sixes=('sixes','sum')
