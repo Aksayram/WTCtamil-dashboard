@@ -238,12 +238,14 @@ with tab2:
     with c1:
         pivot_sr = ll_grp.pivot(index='length_label', columns='line_label', values='SR')
         fig = px.imshow(pivot_sr, color_continuous_scale='RdYlGn', text_auto=True,
-                        title="SR: Length × Line", height=380)
+                        title="SR: Length × Line", height=500)
+        fig.update_traces(textfont_size=14)
         st.plotly_chart(fig, use_container_width=True)
     with c2:
         pivot_dis = ll_grp.pivot(index='length_label', columns='line_label', values='Dismissal%')
         fig2 = px.imshow(pivot_dis, color_continuous_scale='RdYlGn_r', text_auto=True,
-                         title="Dismissal %: Length × Line", height=380)
+                         title="Dismissal %: Length × Line", height=500)
+        fig2.update_traces(textfont_size=14)
         st.plotly_chart(fig2, use_container_width=True)
 
     c3,c4 = st.columns(2)
@@ -546,12 +548,14 @@ with tab4:
             Balls=('batruns','count'), Wickets=('bowl_wicket','sum')).reset_index()
         pivot_b = ll_b.pivot(index='length_label', columns='line_label', values='Balls')
         fig3 = px.imshow(pivot_b, text_auto=True, color_continuous_scale='Blues',
-                         title=f"{sel_bowl} – Delivery Map", height=350)
+                         title=f"{sel_bowl} – Delivery Map", height=480)
+        fig3.update_traces(textfont_size=14)
         st.plotly_chart(fig3, use_container_width=True)
     with c4:
         pivot_wk = ll_b.pivot(index='length_label', columns='line_label', values='Wickets')
         fig4 = px.imshow(pivot_wk, text_auto=True, color_continuous_scale='Reds',
-                         title=f"{sel_bowl} – Wickets by Line & Length", height=350)
+                         title=f"{sel_bowl} – Wickets by Line & Length", height=480)
+        fig4.update_traces(textfont_size=14)
         st.plotly_chart(fig4, use_container_width=True)
 
     # Phase breakdown with Dot%
@@ -1461,7 +1465,8 @@ with tab7:
         # Freq% heatmap batting
         bat_heat = team_bat_cls.pivot_table(index='team_bat', columns='Classification', values='Freq%', fill_value=0)
         fig_bh = px.imshow(bat_heat[cat_order], text_auto=True, color_continuous_scale='RdYlGn',
-                           title="Batting – Over Classification Frequency % Heatmap", height=400)
+                           title="Batting – Over Classification Frequency % Heatmap", height=500)
+        fig_bh.update_traces(textfont_size=13)
         st.plotly_chart(fig_bh, use_container_width=True)
 
         st.divider()
