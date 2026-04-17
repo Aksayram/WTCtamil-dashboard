@@ -71,6 +71,10 @@ def load_data(path):
     df['length_label']    = df['length'].str.replace('_',' ').str.title()
     df['shot_label']      = df['shot'].str.replace('_',' ').str.title()
 
+    # Valid bowling dismissals — exclude run outs and retired
+    bowling_dismissals = ['caught','bowled','leg before wicket','stumped','hit wicket']
+    df['bowl_wicket'] = ((df['out']==1) & (df['dismissal'].isin(bowling_dismissals))).astype(int)
+
     style_map = {
         'RF':'Right Arm Fast','RFM':'Right Arm Fast Medium','RMF':'Right Arm Fast Medium',
         'RM':'Right Arm Medium','LF':'Left Arm Fast','LFM':'Left Arm Fast Medium',
@@ -273,7 +277,7 @@ with tab2:
     total_ll_balls = len(ll)
     sel_len    = st.selectbox("Select a Length", len_opts)
     len_bowl   = ll[ll['length_label']==sel_len].groupby('bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('out','sum')
+        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum')
     ).reset_index()
     len_bowl = len_bowl[len_bowl['Balls'] >= 5]
     len_total_balls = len_bowl['Balls'].sum()
@@ -464,7 +468,7 @@ with tab4:
 
     dff_bowl = dff[dff['wide']==0]
     bowl_grp = dff_bowl.groupby('bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('out','sum'),
+        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum'),
         Dots=('is_dot','sum')
     ).reset_index()
     bowl_grp = bowl_grp[bowl_grp['Balls'] >= min_balls]
@@ -503,7 +507,7 @@ with tab4:
     hand_sel = st.radio("Select Batter Hand", ['LHB','RHB'], horizontal=True, key='hand_sel')
     hand_df  = dff_bowl[dff_bowl['bat_hand']==hand_sel]
     hand_grp = hand_df.groupby('bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('out','sum'), Dots=('is_dot','sum')
+        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum'), Dots=('is_dot','sum')
     ).reset_index()
     hand_grp = hand_grp[hand_grp['Balls'] >= min_balls]
     hand_grp['Economy'] = (hand_grp['Runs']/(hand_grp['Balls']/6)).round(2)
@@ -539,7 +543,7 @@ with tab4:
     c3,c4 = st.columns(2)
     with c3:
         ll_b = bwdf_ll.groupby(['length_label','line_label']).agg(
-            Balls=('batruns','count'), Wickets=('out','sum')).reset_index()
+            Balls=('batruns','count'), Wickets=('bowl_wicket','sum')).reset_index()
         pivot_b = ll_b.pivot(index='length_label', columns='line_label', values='Balls')
         fig3 = px.imshow(pivot_b, text_auto=True, color_continuous_scale='Blues',
                          title=f"{sel_bowl} – Delivery Map", height=350)
@@ -553,7 +557,7 @@ with tab4:
     # Phase breakdown with Dot%
     ph_b = bwdf.groupby('phase_detail',observed=True).agg(
         Balls=('batruns','count'), Runs=('batruns','sum'),
-        Wickets=('out','sum'), Dots=('is_dot','sum')
+        Wickets=('bowl_wicket','sum'), Dots=('is_dot','sum')
     ).reset_index()
     ph_b['Economy'] = (ph_b['Runs']/(ph_b['Balls']/6)).round(2)
     ph_b['Dot%']    = (ph_b['Dots']/ph_b['Balls']*100).round(1)
@@ -639,7 +643,7 @@ with tab5:
     # ── Team Bowling ──
     st.markdown("### 🎳 Team Bowling")
     t_bowl = dff[dff['wide']==0].groupby('team_bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('out','sum'),
+        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum'),
         Dots=('is_dot','sum')
     ).reset_index()
     t_bowl['Economy']    = (t_bowl['Runs']/(t_bowl['Balls']/6)).round(2)
@@ -941,8 +945,8 @@ with tab6:
 # ══ TAB 7 — Momentum Controllers ══════════════════════════════════════════════
 with tab7:
     st.subheader("⚡ Momentum Controllers")
-    mc1, mc2, mc3 = st.tabs([
-        "🏏 Over Start Dominance", "🎳 Bowler Resilience", "🩹 Post-Wicket Scoring"
+    mc1, mc2, mc3, mc4 = st.tabs([
+        "🏏 Over Start Dominance", "🎳 Bowler Resilience", "🩹 Post-Wicket Scoring", "📊 Team Momentum"
     ])
 
     # ── MC TAB 1: Over Start Dominance ────────────────────────────────────────
@@ -1372,6 +1376,210 @@ with tab7:
                                        title=f"{sel_pw} – Post-Wicket SR Distribution",
                                        color_discrete_sequence=['#636EFA'], height=320)
                 st.plotly_chart(fig_pi2, use_container_width=True)
+
+    # ── MC TAB 4: Team Momentum ───────────────────────────────────────────────
+    with mc4:
+        st.subheader("📊 Team Momentum – Batting vs Bowling Over Analysis")
+        st.caption("Classify every over by runs scored/conceded and see which teams dominate")
+
+        # Over-level data including extras (all deliveries per over)
+        over_full = df.groupby(['p_match','inns','over','team_bat','team_bowl']).agg(
+            over_runs=('score','sum'),
+            balls    =('score','count'),
+            wickets  =('bowl_wicket','sum')
+        ).reset_index()
+
+        # Classification function
+        def classify_over(r):
+            if r < 7:   return '🔒 Dot Dominant (0-6)'
+            if r < 10:  return '💤 Soft Over (7-9)'
+            if r < 12:  return '⚡ Impact Over (10-11)'
+            if r < 20:  return '🔥 High Capacity (12-19)'
+            return '💥 Game Changer (20+)'
+
+        over_full['Classification'] = over_full['over_runs'].apply(classify_over)
+        cat_order = ['🔒 Dot Dominant (0-6)','💤 Soft Over (7-9)','⚡ Impact Over (10-11)',
+                     '🔥 High Capacity (12-19)','💥 Game Changer (20+)']
+        over_full['Classification'] = pd.Categorical(over_full['Classification'],
+                                                      categories=cat_order, ordered=True)
+        color_map = {
+            '🔒 Dot Dominant (0-6)' :'#2ecc71',
+            '💤 Soft Over (7-9)'    :'#f1c40f',
+            '⚡ Impact Over (10-11)' :'#e67e22',
+            '🔥 High Capacity (12-19)':'#e74c3c',
+            '💥 Game Changer (20+)'  :'#9b59b6'
+        }
+
+        run_thr_tm = st.slider("Threshold – highlight overs above this run total", 0, 36, 10, key='tm_thr')
+        st.divider()
+
+        # ── BATTING SIDE ──
+        st.markdown("### 🏏 Batting – Which Teams Score Big Overs?")
+
+        bat_overs = over_full.copy()
+        bat_overs['Above_Threshold'] = (bat_overs['over_runs'] >= run_thr_tm).astype(int)
+
+        # Team batting classification breakdown
+        team_bat_cls = bat_overs.groupby(['team_bat','Classification'], observed=True).agg(
+            Count=('over_runs','count')
+        ).reset_index()
+        team_bat_total = bat_overs.groupby('team_bat').agg(Total_Overs=('over_runs','count')).reset_index()
+        team_bat_cls = pd.merge(team_bat_cls, team_bat_total, on='team_bat', how='left')
+        team_bat_cls['Freq%'] = (team_bat_cls['Count']/team_bat_cls['Total_Overs']*100).round(1)
+
+        # Above threshold leaderboard
+        bat_thr = bat_overs[bat_overs['over_runs'] >= run_thr_tm].groupby('team_bat').agg(
+            Above_Count=('over_runs','count'),
+            Avg_Runs   =('over_runs','mean'),
+            Max_Over   =('over_runs','max')
+        ).reset_index()
+        bat_thr = pd.merge(bat_thr, team_bat_total, on='team_bat', how='left')
+        bat_thr['Freq%'] = (bat_thr['Above_Count']/bat_thr['Total_Overs']*100).round(1)
+        bat_thr['Avg_Runs'] = bat_thr['Avg_Runs'].round(1)
+        bat_thr = bat_thr.sort_values('Above_Count',ascending=False).reset_index(drop=True)
+        bat_thr.index += 1
+
+        cb1,cb2 = st.columns([1.2,1])
+        with cb1:
+            fig_bt = px.bar(bat_thr, x='team_bat', y='Above_Count',
+                            color='Freq%', color_continuous_scale='RdYlGn',
+                            text='Above_Count',
+                            title=f"Teams with Most {run_thr_tm}+ Run Overs (Batting)", height=380)
+            fig_bt.update_layout(xaxis_tickangle=-30)
+            st.plotly_chart(fig_bt, use_container_width=True)
+        with cb2:
+            st.dataframe(bat_thr[['team_bat','Above_Count','Total_Overs','Freq%','Avg_Runs','Max_Over']],
+                         use_container_width=True, height=360)
+
+        # Classification stacked bar — batting
+        fig_bc = px.bar(team_bat_cls, x='team_bat', y='Count', color='Classification',
+                        color_discrete_map=color_map, barmode='stack',
+                        title="Batting – Over Classification Breakdown per Team", height=420)
+        fig_bc.update_layout(xaxis_tickangle=-30)
+        st.plotly_chart(fig_bc, use_container_width=True)
+
+        # Freq% heatmap batting
+        bat_heat = team_bat_cls.pivot_table(index='team_bat', columns='Classification', values='Freq%', fill_value=0)
+        fig_bh = px.imshow(bat_heat[cat_order], text_auto=True, color_continuous_scale='RdYlGn',
+                           title="Batting – Over Classification Frequency % Heatmap", height=400)
+        st.plotly_chart(fig_bh, use_container_width=True)
+
+        st.divider()
+
+        # ── BOWLING SIDE ──
+        st.markdown("### 🎳 Bowling – Which Teams Concede Big Overs?")
+
+        bowl_overs = over_full.copy()
+        bowl_overs['Above_Threshold'] = (bowl_overs['over_runs'] >= run_thr_tm).astype(int)
+
+        team_bowl_cls = bowl_overs.groupby(['team_bowl','Classification'], observed=True).agg(
+            Count=('over_runs','count')
+        ).reset_index()
+        team_bowl_total = bowl_overs.groupby('team_bowl').agg(Total_Overs=('over_runs','count')).reset_index()
+        team_bowl_cls = pd.merge(team_bowl_cls, team_bowl_total, on='team_bowl', how='left')
+        team_bowl_cls['Freq%'] = (team_bowl_cls['Count']/team_bowl_cls['Total_Overs']*100).round(1)
+
+        bowl_thr = bowl_overs[bowl_overs['over_runs'] >= run_thr_tm].groupby('team_bowl').agg(
+            Above_Count=('over_runs','count'),
+            Avg_Runs   =('over_runs','mean'),
+            Max_Over   =('over_runs','max')
+        ).reset_index()
+        bowl_thr = pd.merge(bowl_thr, team_bowl_total, on='team_bowl', how='left')
+        bowl_thr['Freq%'] = (bowl_thr['Above_Count']/bowl_thr['Total_Overs']*100).round(1)
+        bowl_thr['Avg_Runs'] = bowl_thr['Avg_Runs'].round(1)
+        bowl_thr = bowl_thr.sort_values('Above_Count',ascending=False).reset_index(drop=True)
+        bowl_thr.index += 1
+
+        cw1,cw2 = st.columns([1.2,1])
+        with cw1:
+            fig_bwt = px.bar(bowl_thr, x='team_bowl', y='Above_Count',
+                             color='Freq%', color_continuous_scale='RdYlGn_r',
+                             text='Above_Count',
+                             title=f"Teams Conceding Most {run_thr_tm}+ Run Overs (Bowling)", height=380)
+            fig_bwt.update_layout(xaxis_tickangle=-30)
+            st.plotly_chart(fig_bwt, use_container_width=True)
+        with cw2:
+            st.dataframe(bowl_thr[['team_bowl','Above_Count','Total_Overs','Freq%','Avg_Runs','Max_Over']],
+                         use_container_width=True, height=360)
+
+        # Classification stacked bar — bowling
+        fig_bwc = px.bar(team_bowl_cls, x='team_bowl', y='Count', color='Classification',
+                         color_discrete_map=color_map, barmode='stack',
+                         title="Bowling – Over Classification Breakdown per Team", height=420)
+        fig_bwc.update_layout(xaxis_tickangle=-30)
+        st.plotly_chart(fig_bwc, use_container_width=True)
+
+        st.divider()
+
+        # ── INDIVIDUAL BOWLER BREAKDOWN per team ──
+        st.markdown("### 🔍 Which Bowler Leaked the Most Big Overs?")
+        sel_tm_team = st.selectbox("Select Team (Bowling)", sorted(over_full['team_bowl'].unique()), key='tm_team')
+
+        # Over-level per bowler
+        over_bowl = df.groupby(['p_match','inns','over','bowl','team_bowl']).agg(
+            over_runs=('score','sum'), balls=('score','count')
+        ).reset_index()
+        over_bowl['Classification'] = over_bowl['over_runs'].apply(classify_over)
+
+        team_bowl_df = over_bowl[over_bowl['team_bowl']==sel_tm_team]
+        bowl_leak = team_bowl_df[team_bowl_df['over_runs'] >= run_thr_tm].groupby('bowl').agg(
+            Big_Overs =('over_runs','count'),
+            Avg_Runs  =('over_runs','mean'),
+            Max_Over  =('over_runs','max')
+        ).reset_index()
+        bowl_total_ov = team_bowl_df.groupby('bowl').agg(Total_Overs=('over_runs','count')).reset_index()
+        bowl_leak = pd.merge(bowl_leak, bowl_total_ov, on='bowl', how='left')
+        bowl_leak['Freq%']    = (bowl_leak['Big_Overs']/bowl_leak['Total_Overs']*100).round(1)
+        bowl_leak['Avg_Runs'] = bowl_leak['Avg_Runs'].round(1)
+        bowl_leak = bowl_leak.sort_values('Big_Overs',ascending=False).reset_index(drop=True)
+        bowl_leak.index += 1
+
+        bl1,bl2 = st.columns([1.2,1])
+        with bl1:
+            fig_bl = px.bar(bowl_leak, x='bowl', y='Big_Overs',
+                            color='Freq%', color_continuous_scale='Reds',
+                            text='Big_Overs',
+                            title=f"{sel_tm_team} – Bowler Big Over Leakage ({run_thr_tm}+)", height=400)
+            fig_bl.update_layout(xaxis_tickangle=-40)
+            st.plotly_chart(fig_bl, use_container_width=True)
+        with bl2:
+            st.dataframe(bowl_leak[['bowl','Big_Overs','Total_Overs','Freq%','Avg_Runs','Max_Over']],
+                         use_container_width=True, height=380)
+
+        # Classification breakdown per bowler in selected team
+        bowl_cls = team_bowl_df.groupby(['bowl','Classification'], observed=True).agg(
+            Count=('over_runs','count')).reset_index()
+        fig_bcls = px.bar(bowl_cls, x='bowl', y='Count', color='Classification',
+                          color_discrete_map=color_map, barmode='stack',
+                          title=f"{sel_tm_team} – Bowler Over Classification Breakdown", height=420)
+        fig_bcls.update_layout(xaxis_tickangle=-40)
+        st.plotly_chart(fig_bcls, use_container_width=True)
+
+        st.divider()
+
+        # ── BATTING vs BOWLING COMPARISON per team ──
+        st.markdown("### ⚔️ Batting vs Bowling – Who Dominates? Who Leaks?")
+        compare = pd.merge(
+            bat_thr[['team_bat','Above_Count','Freq%']].rename(columns={'team_bat':'team','Above_Count':'Bat_Big_Overs','Freq%':'Bat_Freq%'}),
+            bowl_thr[['team_bowl','Above_Count','Freq%']].rename(columns={'team_bowl':'team','Above_Count':'Bowl_Big_Overs','Freq%':'Bowl_Freq%'}),
+            on='team', how='outer'
+        ).fillna(0)
+        compare['Net'] = compare['Bat_Big_Overs'] - compare['Bowl_Big_Overs']
+        compare = compare.sort_values('Net',ascending=False).reset_index(drop=True)
+        compare.index += 1
+
+        cmp1,cmp2 = st.columns([1.2,1])
+        with cmp1:
+            fig_cmp = px.bar(compare, x='team', y=['Bat_Big_Overs','Bowl_Big_Overs'],
+                             barmode='group',
+                             color_discrete_map={'Bat_Big_Overs':'#2ecc71','Bowl_Big_Overs':'#e74c3c'},
+                             title=f"Batting vs Bowling Big Overs ({run_thr_tm}+) per Team", height=420)
+            fig_cmp.update_layout(xaxis_tickangle=-30)
+            st.plotly_chart(fig_cmp, use_container_width=True)
+        with cmp2:
+            st.markdown("**Net = Batting Big Overs − Bowling Big Overs (positive = team dominates)**")
+            st.dataframe(compare[['team','Bat_Big_Overs','Bat_Freq%','Bowl_Big_Overs','Bowl_Freq%','Net']],
+                         use_container_width=True, height=400)
 
 # ── Raw Data ──────────────────────────────────────────────────────────────────
 with st.expander("📋 Raw Data"):
