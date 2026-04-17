@@ -534,7 +534,7 @@ with tab4:
     bwdf_ll  = bwdf.dropna(subset=['line','length'])
 
     bw1,bw2,bw3,bw4,bw5 = st.columns(5)
-    bw1.metric("Balls", len(bwdf)); bw2.metric("Wickets", int(bwdf['out'].sum()))
+    bw1.metric("Balls", len(bwdf)); bw2.metric("Wickets", int(bwdf['bowl_wicket'].sum()))
     econ = bwdf['batruns'].sum()/max(len(bwdf)/6,0.1)
     bw3.metric("Economy", f"{econ:.2f}")
     bw4.metric("Bowl Kind", bwdf['bowl_kind'].mode()[0] if len(bwdf) else "N/A")
@@ -1099,7 +1099,7 @@ with tab7:
         ).reset_index()
 
         # Fix wickets - recompute from raw
-        bowl_wkts = dff[dff['ball']>3].groupby('bowl').agg(Wkts=('out','sum')).reset_index()
+        bowl_wkts = dff[dff['ball']>3].groupby('bowl').agg(Wkts=('bowl_wicket','sum')).reset_index()
         res = res.drop(columns=['Last3_Wkts'])
         res = pd.merge(res, bowl_wkts, on='bowl', how='left')
 
