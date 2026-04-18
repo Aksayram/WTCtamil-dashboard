@@ -27,7 +27,12 @@ st.set_page_config(page_title="IPL 2026 Analytics", layout="wide", page_icon="�
 # ── Load & clean ───────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data(path):
-    df = pd.read_excel(path, sheet_name='t20_bbb (1)')
+    # Auto-detect sheet — handles both 't20_bbb (1)' and 't20_bbb'
+    from openpyxl import load_workbook
+    wb = load_workbook(path, read_only=True)
+    sheet_name = next((s for s in wb.sheetnames if s.startswith('t20_bbb')), wb.sheetnames[0])
+    wb.close()
+    df = pd.read_excel(path, sheet_name=sheet_name)
     df['bat']        = df['bat'].str.strip().str.title()
     df['bowl']       = df['bowl'].str.strip().str.title()
     df['team_bat']   = df['team_bat'].str.strip().str.replace('Royal Challengers Bangalore','RCB').str.replace('Royal Challengers Bengaluru','RCB')
@@ -1193,8 +1198,8 @@ with tab7:
             Dot_Pct=('Last3_Dot%','mean'), Boundary_Pct=('Last3_Boundary%','mean')
         ).reset_index()
         # Map bowler to team
-        bowl_team_map = dff[['bowl','team_bowl']].drop_duplicates().set_index('bowl')['team_bowl']
-        team_res['team'] = team_res['bowl'].map(bowl_team_map)
+        bowl_team_map = dff.groupby('bowl')['team_bowl'].agg(lambda x: x.mode()[0]).to_dict()
+        team_res['team'] = team_res['bowl'].astype(str).map(bowl_team_map)
         team_res_grp = team_res.groupby('team').agg(
             Bad_Starts=('Bad_Starts','sum'),
             Strict=('Strict','sum'), Good=('Good','sum'), Blown=('Blown','sum'),
@@ -1335,8 +1340,8 @@ with tab7:
             st.markdown("### 🏆 Team Post-Wicket Leaderboard")
             st.caption("Which team's batters score best after a wicket falls?")
             # Need team info — merge from df
-            bat_team_map = dff[['bat','team_bat']].drop_duplicates().set_index('bat')['team_bat']
-            pw['team'] = pw['bat'].map(bat_team_map)
+            bat_team_map = dff.groupby('bat')['team_bat'].agg(lambda x: x.mode()[0]).to_dict()
+            pw['team'] = pw['bat'].astype(str).map(bat_team_map)
             team_pw = pw.groupby('team').agg(
                 Times=('runs','count'), Total_Runs=('runs','sum'),
                 Total_Balls=('balls','sum'), Fours=('fours','sum'), Sixes=('sixes','sum')
