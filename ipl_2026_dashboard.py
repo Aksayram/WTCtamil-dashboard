@@ -315,18 +315,19 @@ with tab3:
     bat_grp = dff_legal.groupby('bat').agg(
         Balls=('batruns','count'), Runs=('batruns','sum'), Outs=('out','sum'),
         Fours=('score', lambda x:(x==4).sum()), Sixes=('score', lambda x:(x==6).sum()),
-        Dots=('is_dot','sum')
+        Dots=('is_dot','sum'), Controlled=('control','sum'), Ctrl_Balls=('control','count')
     ).reset_index()
     bat_grp = bat_grp[bat_grp['Balls'] >= min_balls]
-    bat_grp['SR']   = (bat_grp['Runs']/bat_grp['Balls']*100).round(1)
-    bat_grp['Avg']  = (bat_grp['Runs']/bat_grp['Outs'].replace(0,np.nan)).round(1).fillna(bat_grp['Runs'])
-    bat_grp['BPB']  = bat_grp.apply(lambda r: bpb(r['Balls'],r['Fours'],r['Sixes']), axis=1)
-    bat_grp['Dot%'] = (bat_grp['Dots']/bat_grp['Balls']*100).round(1)
+    bat_grp['SR']       = (bat_grp['Runs']/bat_grp['Balls']*100).round(1)
+    bat_grp['Avg']      = (bat_grp['Runs']/bat_grp['Outs'].replace(0,np.nan)).round(1).fillna(bat_grp['Runs'])
+    bat_grp['BPB']      = bat_grp.apply(lambda r: bpb(r['Balls'],r['Fours'],r['Sixes']), axis=1)
+    bat_grp['Dot%']     = (bat_grp['Dots']/bat_grp['Balls']*100).round(1)
+    bat_grp['Control%'] = (bat_grp['Controlled']/bat_grp['Ctrl_Balls'].replace(0,np.nan)*100).round(1)
 
     c1,c2 = st.columns(2)
     with c1:
         top_n  = st.slider("Top N batters", 5, 30, 15, key='bat_n')
-        metric = st.radio("Rank by", ['SR','Runs','Avg','BPB','Dot%'], horizontal=True, key='bat_m')
+        metric = st.radio("Rank by", ['SR','Runs','Avg','BPB','Dot%','Control%'], horizontal=True, key='bat_m')
         asc = metric in ['BPB','Dot%']
         fig = px.bar(bat_grp.nsmallest(top_n,metric) if asc else bat_grp.nlargest(top_n,metric),
                      x='bat', y=metric, color=metric,
@@ -414,28 +415,30 @@ with tab3:
     pk = bdf.groupby('bowl_kind').agg(
         Balls=('batruns','count'), Runs=('batruns','sum'), Outs=('out','sum'),
         Fours=('score', lambda x:(x==4).sum()), Sixes=('score', lambda x:(x==6).sum()),
-        Dots=('is_dot','sum')
+        Dots=('is_dot','sum'), Controlled=('control','sum'), Ctrl_Balls=('control','count')
     ).reset_index()
-    pk['SR']   = (pk['Runs']/pk['Balls']*100).round(1)
-    pk['Avg']  = (pk['Runs']/pk['Outs'].replace(0,np.nan)).round(1).fillna(pk['Runs'])
-    pk['BPB']  = pk.apply(lambda r: bpb(r['Balls'],r['Fours'],r['Sixes']), axis=1)
-    pk['Dot%'] = (pk['Dots']/pk['Balls']*100).round(1)
+    pk['SR']       = (pk['Runs']/pk['Balls']*100).round(1)
+    pk['Avg']      = (pk['Runs']/pk['Outs'].replace(0,np.nan)).round(1).fillna(pk['Runs'])
+    pk['BPB']      = pk.apply(lambda r: bpb(r['Balls'],r['Fours'],r['Sixes']), axis=1)
+    pk['Dot%']     = (pk['Dots']/pk['Balls']*100).round(1)
+    pk['Control%'] = (pk['Controlled']/pk['Ctrl_Balls'].replace(0,np.nan)*100).round(1)
 
     st.markdown("**Matchup – Pace & Spin**")
-    st.dataframe(pk[['bowl_kind','Balls','Runs','SR','Avg','Fours','Sixes','BPB','Dot%']], use_container_width=True)
+    st.dataframe(pk[['bowl_kind','Balls','Runs','SR','Avg','Fours','Sixes','BPB','Dot%','Control%']], use_container_width=True)
 
     st.divider()
     st.markdown(f"**{sel_bat} – vs Each Bowling Style**")
     bs = bdf.groupby('bowl_style_label').agg(
         Balls=('batruns','count'), Runs=('batruns','sum'), Outs=('out','sum'),
         Fours=('score', lambda x:(x==4).sum()), Sixes=('score', lambda x:(x==6).sum()),
-        Dots=('is_dot','sum')
+        Dots=('is_dot','sum'), Controlled=('control','sum'), Ctrl_Balls=('control','count')
     ).reset_index()
     bs = bs[bs['Balls']>=3]
-    bs['SR']   = (bs['Runs']/bs['Balls']*100).round(1)
-    bs['Avg']  = (bs['Runs']/bs['Outs'].replace(0,np.nan)).round(1).fillna(bs['Runs'])
-    bs['BPB']  = bs.apply(lambda r: bpb(r['Balls'],r['Fours'],r['Sixes']), axis=1)
-    bs['Dot%'] = (bs['Dots']/bs['Balls']*100).round(1)
+    bs['SR']       = (bs['Runs']/bs['Balls']*100).round(1)
+    bs['Avg']      = (bs['Runs']/bs['Outs'].replace(0,np.nan)).round(1).fillna(bs['Runs'])
+    bs['BPB']      = bs.apply(lambda r: bpb(r['Balls'],r['Fours'],r['Sixes']), axis=1)
+    bs['Dot%']     = (bs['Dots']/bs['Balls']*100).round(1)
+    bs['Control%'] = (bs['Controlled']/bs['Ctrl_Balls'].replace(0,np.nan)*100).round(1)
 
     c5,c6 = st.columns(2)
     with c5:
@@ -445,7 +448,7 @@ with tab3:
         fig5.update_layout(xaxis_tickangle=-30)
         st.plotly_chart(fig5, use_container_width=True)
     with c6:
-        st.dataframe(bs[['bowl_style_label','Balls','Runs','SR','Avg','Fours','Sixes','BPB','Dot%']].sort_values('SR',ascending=False),
+        st.dataframe(bs[['bowl_style_label','Balls','Runs','SR','Avg','Fours','Sixes','BPB','Dot%','Control%']].sort_values('SR',ascending=False),
                      use_container_width=True)
 
     c7,c8 = st.columns(2)
@@ -469,7 +472,41 @@ with tab3:
                             color_continuous_scale='RdYlGn', title=f"{sel_bat} – Scoring Zones", height=350)
         st.plotly_chart(fig8, use_container_width=True)
 
-# ══ TAB 4 — Bowler Analysis ═══════════════════════════════════════════════════
+    # ── Dismissal Heatmap ──
+    st.divider()
+    st.markdown(f"#### 🎯 {sel_bat} – Dismissal Heatmap (Line & Length)")
+    st.caption("Where does this batter get out? Darker = more dismissals")
+    dis_ll = bdf[(bdf['out']==1)].dropna(subset=['line','length'])
+    if dis_ll.empty:
+        st.info("No dismissal data available for this batter with current filters.")
+    else:
+        dis_grp = dis_ll.groupby(['length_label','line_label']).agg(
+            Dismissals=('out','sum')
+        ).reset_index()
+        pivot_dis = dis_grp.pivot(index='length_label', columns='line_label', values='Dismissals').fillna(0)
+        fig_dis = px.imshow(pivot_dis, color_continuous_scale='Reds',
+                            text_auto=True,
+                            title=f"{sel_bat} – Dismissals by Line & Length",
+                            height=500)
+        fig_dis.update_traces(textfont_size=14)
+        fig_dis.update_layout(
+            xaxis_title="Line",
+            yaxis_title="Length",
+            coloraxis_colorbar_title="Dismissals"
+        )
+        st.plotly_chart(fig_dis, use_container_width=True)
+
+        # Also show as a table for clarity
+        st.markdown("**Dismissal Count Table**")
+        dis_table = dis_ll.groupby(['length_label','line_label']).agg(
+            Dismissals=('out','sum'),
+            Balls=('batruns','count')
+        ).reset_index()
+        dis_table['Dis%'] = (dis_table['Dismissals']/dis_table['Balls']*100).round(1)
+        dis_table = dis_table.sort_values('Dismissals', ascending=False).reset_index(drop=True)
+        dis_table.index += 1
+        st.dataframe(dis_table[['length_label','line_label','Balls','Dismissals','Dis%']],
+                     use_container_width=True)
 with tab4:
     st.subheader("Bowler Performance Analysis")
 
