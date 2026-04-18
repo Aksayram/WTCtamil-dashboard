@@ -476,17 +476,22 @@ with tab3:
     st.divider()
     st.markdown(f"#### 🎯 {sel_bat} – Dismissal Heatmap (Line & Length)")
     st.caption("Where does this batter get out? Darker = more dismissals")
-    dis_ll = bdf[(bdf['out']==1)].dropna(subset=['line','length'])
-    if dis_ll.empty:
+    dis_all = bdf.dropna(subset=['line','length'])
+    if dis_all.empty or dis_all['out'].sum() == 0:
         st.info("No dismissal data available for this batter with current filters.")
     else:
-        dis_grp = dis_ll.groupby(['length_label','line_label']).agg(
+        # All balls faced grouped by length & line
+        all_grp = dis_all.groupby(['length_label','line_label']).agg(
+            Balls=('batruns','count'),
             Dismissals=('out','sum')
         ).reset_index()
-        pivot_dis = dis_grp.pivot(index='length_label', columns='line_label', values='Dismissals').fillna(0)
+        all_grp['Dis%'] = (all_grp['Dismissals']/all_grp['Balls']*100).round(1)
+
+        # Heatmap shows dismissal count
+        pivot_dis = all_grp.pivot(index='length_label', columns='line_label', values='Dismissals').fillna(0)
         fig_dis = px.imshow(pivot_dis, color_continuous_scale='Reds',
                             text_auto=True,
-                            title=f"{sel_bat} – Dismissals by Line & Length",
+                            title=f"{sel_bat} – Dismissals by Line & Length (count)",
                             height=500)
         fig_dis.update_traces(textfont_size=14)
         fig_dis.update_layout(
@@ -496,14 +501,9 @@ with tab3:
         )
         st.plotly_chart(fig_dis, use_container_width=True)
 
-        # Also show as a table for clarity
-        st.markdown("**Dismissal Count Table**")
-        dis_table = dis_ll.groupby(['length_label','line_label']).agg(
-            Dismissals=('out','sum'),
-            Balls=('batruns','count')
-        ).reset_index()
-        dis_table['Dis%'] = (dis_table['Dismissals']/dis_table['Balls']*100).round(1)
-        dis_table = dis_table.sort_values('Dismissals', ascending=False).reset_index(drop=True)
+        st.markdown("**Dismissal Table – Balls Faced, Times Out & Dismissal Rate**")
+        st.caption("Dis% = Dismissals ÷ Total balls faced at that length & line × 100")
+        dis_table = all_grp.sort_values('Dismissals', ascending=False).reset_index(drop=True)
         dis_table.index += 1
         st.dataframe(dis_table[['length_label','line_label','Balls','Dismissals','Dis%']],
                      use_container_width=True)
