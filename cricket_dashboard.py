@@ -47,15 +47,15 @@ def load_data(path):
     df['Bowler'] = df['Bowler'].str.strip().str.title()
     df['Batter'] = df['Batter'].str.strip().str.title()
     df['Ground'] = df['Ground'].str.strip().str.title()
-    df['Type'] = df['Type'].str.strip().str.title().replace({'Spin': 'Spinner'})
+    df['Type'] = df['Type'].str.strip().str.title().replace({'Spin': 'Spinner'}).fillna('Unknown')
     df['Bowling Hand'] = df['Bowling Hand'].str.strip().str.title()
     df['Bowling Hand'] = df['Bowling Hand'].replace({
         'Right Hand': 'Right Arm', 'Left Hand': 'Left Arm',
         'Right-Arm': 'Right Arm', 'Left-Arm': 'Left Arm'
-    })
-    df['Pitching Length'] = df['Pitching Length'].str.strip().str.title()
-    df['Pitching Line']   = df['Pitching Line'].str.strip().str.title()
-    df['Bowling Side'] = df['Bowling Side'].str.strip().str.title()
+    }).fillna('Unknown')
+    df['Pitching Length'] = df['Pitching Length'].str.strip().str.title().fillna('Unknown')
+    df['Pitching Line']   = df['Pitching Line'].str.strip().str.title().fillna('Unknown')
+    df['Bowling Side'] = df['Bowling Side'].str.strip().str.title().fillna('Unknown')
 
     # Numeric
     df['Speed']     = pd.to_numeric(df['Speed'], errors='coerce')
