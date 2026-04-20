@@ -282,7 +282,7 @@ with tab2:
     total_ll_balls = len(ll)
     sel_len    = st.selectbox("Select a Length", len_opts)
     len_bowl   = ll[ll['length_label']==sel_len].groupby('bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum')
+        Balls=('batruns','count'), Runs=('score','sum'), Wickets=('bowl_wicket','sum')
     ).reset_index()
     len_bowl = len_bowl[len_bowl['Balls'] >= 5]
     len_total_balls = len_bowl['Balls'].sum()
@@ -510,7 +510,7 @@ with tab4:
 
     dff_bowl = dff[dff['wide']==0]
     bowl_grp = dff_bowl.groupby('bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum'),
+        Balls=('batruns','count'), Runs=('score','sum'), Wickets=('bowl_wicket','sum'),
         Dots=('is_dot','sum')
     ).reset_index()
     bowl_grp = bowl_grp[bowl_grp['Balls'] >= min_balls]
@@ -549,7 +549,7 @@ with tab4:
     hand_sel = st.radio("Select Batter Hand", ['LHB','RHB'], horizontal=True, key='hand_sel')
     hand_df  = dff_bowl[dff_bowl['bat_hand']==hand_sel]
     hand_grp = hand_df.groupby('bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum'), Dots=('is_dot','sum')
+        Balls=('batruns','count'), Runs=('score','sum'), Wickets=('bowl_wicket','sum'), Dots=('is_dot','sum')
     ).reset_index()
     hand_grp = hand_grp[hand_grp['Balls'] >= min_balls]
     hand_grp['Economy'] = (hand_grp['Runs']/(hand_grp['Balls']/6)).round(2)
@@ -577,7 +577,7 @@ with tab4:
 
     bw1,bw2,bw3,bw4,bw5 = st.columns(5)
     bw1.metric("Balls", len(bwdf)); bw2.metric("Wickets", int(bwdf['bowl_wicket'].sum()))
-    econ = bwdf['batruns'].sum()/max(len(bwdf)/6,0.1)
+    econ = bwdf['score'].sum()/max(len(bwdf)/6,0.1)
     bw3.metric("Economy", f"{econ:.2f}")
     bw4.metric("Bowl Kind", bwdf['bowl_kind'].mode()[0] if len(bwdf) else "N/A")
     bw5.metric("Dot%", f"{dot_pct(int(bwdf['is_dot'].sum()),len(bwdf))}%")
@@ -600,7 +600,7 @@ with tab4:
 
     # Phase breakdown with Dot%
     ph_b = bwdf.groupby('phase_detail',observed=True).agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'),
+        Balls=('batruns','count'), Runs=('score','sum'),
         Wickets=('bowl_wicket','sum'), Dots=('is_dot','sum')
     ).reset_index()
     ph_b['Economy'] = (ph_b['Runs']/(ph_b['Balls']/6)).round(2)
@@ -687,7 +687,7 @@ with tab5:
     # ── Team Bowling ──
     st.markdown("### 🎳 Team Bowling")
     t_bowl = dff[dff['wide']==0].groupby('team_bowl').agg(
-        Balls=('batruns','count'), Runs=('batruns','sum'), Wickets=('bowl_wicket','sum'),
+        Balls=('batruns','count'), Runs=('score','sum'), Wickets=('bowl_wicket','sum'),
         Dots=('is_dot','sum')
     ).reset_index()
     t_bowl['Economy']    = (t_bowl['Runs']/(t_bowl['Balls']/6)).round(2)
