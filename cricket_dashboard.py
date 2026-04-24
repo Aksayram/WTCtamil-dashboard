@@ -80,12 +80,16 @@ bowler_type  = st.sidebar.multiselect("Bowler Type", sorted(df['Type'].unique())
 bowling_hand = st.sidebar.multiselect("Bowling Arm", sorted(df['Bowling Hand'].unique()), default=sorted(df['Bowling Hand'].unique()))
 bowling_side = st.sidebar.multiselect("Bowling Side", sorted(df['Bowling Side'].unique()), default=sorted(df['Bowling Side'].unique()))
 sel_ground   = st.sidebar.multiselect("Ground", sorted(df['Ground'].unique()), default=sorted(df['Ground'].unique()))
+sel_phase    = st.sidebar.multiselect("Phase",
+    ['Powerplay (1-6)', 'Middle (7-16)', 'Death (17-20)'],
+    default=['Powerplay (1-6)', 'Middle (7-16)', 'Death (17-20)'])
 
 filt = (
     df['Type'].isin(bowler_type) &
     df['Bowling Hand'].isin(bowling_hand) &
     df['Bowling Side'].isin(bowling_side) &
-    df['Ground'].isin(sel_ground)
+    df['Ground'].isin(sel_ground) &
+    df['Phase'].isin(sel_phase)
 )
 dff = df[filt]
 
@@ -181,18 +185,72 @@ with tab1:
         st.plotly_chart(fig2, use_container_width=True)
 
         st.divider()
-        st.markdown("### 📈 Speed Bucket Distribution")
-        bkt_all = dff.groupby(['Bowler','Speed Bucket'], observed=True).agg(
-            Balls=('Run','count'), Runs=('Run','sum'), Wickets=('Dismissed','sum')
-        ).reset_index()
-        bkt_all['Economy'] = (bkt_all['Runs']/(bkt_all['Balls']/6)).round(2)
-        bkt_all['Speed Bucket'] = bkt_all['Speed Bucket'].astype(str)
-        top10 = bowl_grp.head(10)['Bowler'].tolist()
-        fig3 = px.bar(bkt_all[bkt_all['Bowler'].isin(top10)],
-                      x='Speed Bucket', y='Balls', color='Bowler', barmode='group',
-                      title="Balls per Speed Bucket – Top 10 Bowlers", height=420)
-        fig3.update_layout(xaxis_tickangle=-30)
-        st.plotly_chart(fig3, use_container_width=True)
+        st.markdown("### 📊 Phase-wise PACE ON vs PACE OFF")
+        st.caption("PACE ON = 130+ km/h | PACE OFF = below 130 km/h | All bowlers included")
+
+        all_bowlers = dff.copy()
+        all_bowlers['Delivery'] = np.where(all_bowlers['Speed'] >= 130, 'PACE ON', 'PACE OFF')
+
+        phase_sel = st.selectbox("Select Phase",
+                                  ['Powerplay (1-6)', 'Middle (7-16)', 'Death (17-20)'],
+                                  key='phase_pace')
+
+        phase_data = all_bowlers[all_bowlers['Phase'].astype(str) == phase_sel]
+
+        if phase_data.empty:
+            st.info("No data for this phase.")
+        else:
+            total    = len(phase_data)
+            pace_on  = len(phase_data[phase_data['Delivery']=='PACE ON'])
+            pace_off = len(phase_data[phase_data['Delivery']=='PACE OFF'])
+
+            po1,po2,po3 = st.columns(3)
+            po1.metric("Total Deliveries", f"{total:,}")
+            po2.metric("PACE ON (130+)", f"{pace_on:,} ({pace_on/total*100:.1f}%)")
+            po3.metric("PACE OFF (<130)", f"{pace_off:,} ({pace_off/total*100:.1f}%)")
+
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                pie_data = pd.DataFrame({
+                    'Type': ['PACE ON', 'PACE OFF'],
+                    'Count': [pace_on, pace_off]
+                })
+                fig_pie = px.pie(pie_data, names='Type', values='Count',
+                                 color='Type',
+                                 color_discrete_map={'PACE ON':'#636EFA','PACE OFF':'#EF553B'},
+                                 title=f"{phase_sel} – PACE ON vs PACE OFF %",
+                                 height=380)
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+            with col_p2:
+                bowl_split = phase_data.groupby(['Bowler','Delivery']).size().reset_index(name='Count')
+                bowl_total = phase_data.groupby('Bowler').size().reset_index(name='Total')
+                bowl_split = pd.merge(bowl_split, bowl_total, on='Bowler', how='left')
+                bowl_split['Pct'] = (bowl_split['Count']/bowl_split['Total']*100).round(1)
+                pace_off_only = bowl_split[bowl_split['Delivery']=='PACE OFF'].sort_values('Pct', ascending=False)
+                fig_bowl = px.bar(pace_off_only, x='Bowler', y='Pct',
+                                  color='Pct', color_continuous_scale='Reds',
+                                  text='Pct',
+                                  title=f"{phase_sel} – PACE OFF % per Bowler",
+                                  height=380)
+                fig_bowl.update_layout(xaxis_tickangle=-40)
+                st.plotly_chart(fig_bowl, use_container_width=True)
+
+            # All phases comparison
+            st.markdown("**PACE OFF % Across All Phases**")
+            all_phase = all_bowlers.groupby(['Phase','Delivery'], observed=True).size().reset_index(name='Count')
+            all_total = all_bowlers.groupby('Phase', observed=True).size().reset_index(name='Total')
+            all_phase = pd.merge(all_phase, all_total, on='Phase', how='left')
+            all_phase['Pct'] = (all_phase['Count']/all_phase['Total']*100).round(1)
+            all_pace_off = all_phase[all_phase['Delivery']=='PACE OFF']
+            fig_all = px.bar(all_pace_off, x='Phase', y='Pct',
+                             color='Phase', text='Pct',
+                             color_discrete_map={'Powerplay (1-6)':'#636EFA',
+                                                 'Middle (7-16)':'#EF553B',
+                                                 'Death (17-20)':'#00CC96'},
+                             title="PACE OFF % by Phase (all bowlers combined)",
+                             height=350)
+            st.plotly_chart(fig_all, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — Bowler Deep Dive
