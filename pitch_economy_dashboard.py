@@ -264,9 +264,7 @@ st.subheader("📈 Economy per match")
 if is_overall:
     st.caption(
         "Each line is one full IPL season, games numbered chronologically "
-        "across all grounds. Faded line = per-game economy; thick line = "
-        "5-game rolling average to cut through noise. Faint horizontal "
-        "lines are season averages."
+        "across all grounds. Faint horizontal lines are season averages."
     )
 else:
     st.caption(
@@ -314,7 +312,7 @@ for yr, sub in match_econ_full.groupby("year"):
 
     # Smaller markers + thinner line in Overall mode (lots of dots)
     marker_size = 5 if is_overall else 9
-    line_width = 1.5 if is_overall else 2.5
+    line_width = 2 if is_overall else 2.5
 
     fig_overall.add_trace(go.Scatter(
         x=sub["match_num"], y=sub["economy"],
@@ -324,20 +322,7 @@ for yr, sub in match_econ_full.groupby("year"):
         marker=dict(size=marker_size),
         customdata=custom,
         hovertemplate=hover,
-        opacity=0.55 if is_overall else 1.0,
     ))
-
-    # Rolling average overlay — only in Overall mode where noise dominates
-    if is_overall and len(sub) >= 5:
-        roll = sub["economy"].rolling(window=5, min_periods=3, center=True).mean()
-        fig_overall.add_trace(go.Scatter(
-            x=sub["match_num"], y=roll,
-            mode="lines",
-            name=f"{yr} (5-game avg)",
-            line=dict(color=color, width=3),
-            hoverinfo="skip",
-            showlegend=True,
-        ))
 
     yr_avg = sub["economy"].mean()
     fig_overall.add_hline(
