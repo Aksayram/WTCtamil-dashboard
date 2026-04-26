@@ -521,7 +521,7 @@ if work.empty or not years_selected:
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
-st.title("🏏 IPL Pitch Slowdown Analyzer")
+st.title("🏏 IPL Pitch Analyzer")
 ground_label = "All grounds" if is_overall else ground.split(",")[0]
 st.caption(
     f"**{ground_label}** · "
