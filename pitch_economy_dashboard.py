@@ -144,14 +144,15 @@ def assign_match_seq_within_year(match_df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data
 def match_meta(df: pd.DataFrame) -> pd.DataFrame:
-    """Per-match metadata for hover tooltips: matchup string + total runs."""
+    """Per-match metadata for hover tooltips: matchup, total runs, ground."""
     teams = (
         df.groupby("p_match")["team_bat"]
         .apply(lambda s: " vs ".join(sorted(s.unique())))
         .reset_index(name="matchup")
     )
     runs = df.groupby("p_match")["total_runs"].sum().reset_index(name="match_runs")
-    return teams.merge(runs, on="p_match")
+    grounds = df[["p_match", "ground"]].drop_duplicates()
+    return teams.merge(runs, on="p_match").merge(grounds, on="p_match")
 
 
 # ---------------------------------------------------------------------------
@@ -159,25 +160,27 @@ def match_meta(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 st.sidebar.title("⚙️ Filters")
 
-uploaded = st.sidebar.file_uploader(
-    "Upload IPL ball-by-ball Excel (optional)",
-    type=["xlsx"],
-    help=f"Defaults to {DEFAULT_FILE} in the working directory.",
-)
-
 try:
-    raw_df = load_data(uploaded if uploaded is not None else DEFAULT_FILE)
+    raw_df = load_data(DEFAULT_FILE)
 except FileNotFoundError:
     st.error(
         f"Could not find `{DEFAULT_FILE}`. "
-        "Upload the file from the sidebar or place it next to this script."
+        "Make sure the data file is in the same directory as this script."
     )
     st.stop()
 
 sessions_df = classify_day_night(raw_df)
 
+OVERALL_LABEL = "🌐 Overall (all grounds)"
+
 all_grounds = sorted(raw_df["ground"].unique().tolist())
-ground = st.sidebar.selectbox("Ground", all_grounds, index=0)
+ground_options = [OVERALL_LABEL] + all_grounds
+ground = st.sidebar.selectbox(
+    "Ground", ground_options, index=0,
+    help="Pick one ground for venue-specific analysis, or 'Overall' to see "
+         "league-wide trends across all grounds chronologically.",
+)
+is_overall = (ground == OVERALL_LABEL)
 
 all_years = sorted(raw_df["year"].unique().tolist())
 years_selected = st.sidebar.multiselect(
@@ -203,7 +206,10 @@ session_filter = st.sidebar.radio(
 # ---------------------------------------------------------------------------
 # Filter universe
 # ---------------------------------------------------------------------------
-work = raw_df[raw_df["ground"] == ground].copy()
+if is_overall:
+    work = raw_df.copy()
+else:
+    work = raw_df[raw_df["ground"] == ground].copy()
 work = work[work["year"].isin(years_selected)]
 work = filter_innings(work, innings_filter)
 work = filter_session(work, session_filter, sessions_df)
@@ -217,9 +223,9 @@ if work.empty or not years_selected:
 # Header
 # ---------------------------------------------------------------------------
 st.title("🏏 IPL Pitch Slowdown Analyzer")
-short_ground = ground.split(",")[0]
+ground_label = "All grounds" if is_overall else ground.split(",")[0]
 st.caption(
-    f"**{short_ground}** · "
+    f"**{ground_label}** · "
     f"Seasons: {', '.join(str(y) for y in sorted(years_selected))} · "
     f"Innings: {innings_filter} · Session: {session_filter}"
 )
@@ -236,7 +242,8 @@ high_row = match_econ_full.loc[match_econ_full["economy"].idxmax()]
 low_row = match_econ_full.loc[match_econ_full["economy"].idxmin()]
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Games at this ground", f"{n_games}")
+games_label = "Games (all grounds)" if is_overall else "Games at this ground"
+c1.metric(games_label, f"{n_games}")
 c2.metric("Avg economy", f"{avg_econ:.2f}")
 c3.metric("Highest econ", f"{high_row['economy']:.2f}",
           help=f"{high_row['date'].strftime('%d %b %Y')}")
@@ -254,37 +261,83 @@ seq_lookup = match_econ_full[["p_match", "match_num"]]
 # 2. Overall economy per match
 # ---------------------------------------------------------------------------
 st.subheader("📈 Economy per match")
-st.caption(
-    "Each line is one season at this ground. X-axis is match number "
-    "*within that season*. Faint horizontal line per season is its average — "
-    "dips below it are slower-than-typical games."
-)
+if is_overall:
+    st.caption(
+        "Each line is one full IPL season, games numbered chronologically "
+        "across all grounds. Faded line = per-game economy; thick line = "
+        "5-game rolling average to cut through noise. Faint horizontal "
+        "lines are season averages."
+    )
+else:
+    st.caption(
+        "Each line is one season at this ground. X-axis is match number "
+        "*within that season*. Faint horizontal line per season is its average — "
+        "dips below it are slower-than-typical games."
+    )
 
 fig_overall = go.Figure()
 for yr, sub in match_econ_full.groupby("year"):
     sub = sub.sort_values("match_num")
     color = YEAR_COLORS.get(yr, "#888888")
 
-    fig_overall.add_trace(go.Scatter(
-        x=sub["match_num"], y=sub["economy"],
-        mode="lines+markers",
-        name=str(yr),
-        line=dict(color=color, width=2.5),
-        marker=dict(size=9),
-        customdata=np.stack([
+    # Hover differs slightly between modes — include ground in Overall view
+    if is_overall:
+        custom = np.stack([
             sub["date"].dt.strftime("%d %b %Y"),
             sub["matchup"],
             sub["total_runs"],
             sub["overs"].round(1),
-        ], axis=-1),
-        hovertemplate=(
+            sub["ground"].apply(lambda g: g.split(",")[0]),
+        ], axis=-1)
+        hover = (
+            f"<b>{yr} · Game %{{x}}</b><br>"
+            "Economy: %{y:.2f} rpo<br>"
+            "Date: %{customdata[0]}<br>"
+            "Match: %{customdata[1]}<br>"
+            "Ground: %{customdata[4]}<br>"
+            "Runs: %{customdata[2]} in %{customdata[3]} overs<extra></extra>"
+        )
+    else:
+        custom = np.stack([
+            sub["date"].dt.strftime("%d %b %Y"),
+            sub["matchup"],
+            sub["total_runs"],
+            sub["overs"].round(1),
+        ], axis=-1)
+        hover = (
             f"<b>{yr} · Game %{{x}}</b><br>"
             "Economy: %{y:.2f} rpo<br>"
             "Date: %{customdata[0]}<br>"
             "Match: %{customdata[1]}<br>"
             "Runs: %{customdata[2]} in %{customdata[3]} overs<extra></extra>"
-        ),
+        )
+
+    # Smaller markers + thinner line in Overall mode (lots of dots)
+    marker_size = 5 if is_overall else 9
+    line_width = 1.5 if is_overall else 2.5
+
+    fig_overall.add_trace(go.Scatter(
+        x=sub["match_num"], y=sub["economy"],
+        mode="lines+markers",
+        name=str(yr),
+        line=dict(color=color, width=line_width),
+        marker=dict(size=marker_size),
+        customdata=custom,
+        hovertemplate=hover,
+        opacity=0.55 if is_overall else 1.0,
     ))
+
+    # Rolling average overlay — only in Overall mode where noise dominates
+    if is_overall and len(sub) >= 5:
+        roll = sub["economy"].rolling(window=5, min_periods=3, center=True).mean()
+        fig_overall.add_trace(go.Scatter(
+            x=sub["match_num"], y=roll,
+            mode="lines",
+            name=f"{yr} (5-game avg)",
+            line=dict(color=color, width=3),
+            hoverinfo="skip",
+            showlegend=True,
+        ))
 
     yr_avg = sub["economy"].mean()
     fig_overall.add_hline(
@@ -297,13 +350,16 @@ for yr, sub in match_econ_full.groupby("year"):
         annotation_font_size=10,
     )
 
+# X-axis tick density adapts to game count
+xaxis_dtick = 5 if is_overall else 1
+
 fig_overall.update_layout(
-    xaxis_title="Match number at ground (within season)",
+    xaxis_title="Match number (within season, chronological)",
     yaxis_title="Bowling economy (runs/over)",
     hovermode="closest",
     height=460,
     legend_title="Season",
-    xaxis=dict(dtick=1),
+    xaxis=dict(dtick=xaxis_dtick),
 )
 st.plotly_chart(fig_overall, use_container_width=True)
 
@@ -333,6 +389,7 @@ phase_econ = phase_econ.merge(seq_lookup, on="p_match", how="left")
 
 years_sorted = sorted(years_selected)
 n_years = len(years_sorted)
+phase_xaxis_dtick = 5 if is_overall else 1
 
 if n_years == 1:
     yr = years_sorted[0]
@@ -356,12 +413,12 @@ if n_years == 1:
         ))
     fig_phase.update_layout(
         title=f"Phase economies — {yr}",
-        xaxis_title="Match number at ground (within season)",
+        xaxis_title="Match number (within season)",
         yaxis_title="Economy (runs/over)",
         height=460,
         hovermode="x unified",
         legend_title="Phase",
-        xaxis=dict(dtick=1),
+        xaxis=dict(dtick=phase_xaxis_dtick),
     )
     st.plotly_chart(fig_phase, use_container_width=True)
 else:
@@ -391,7 +448,7 @@ else:
             height=380,
             legend_title="Season",
             margin=dict(t=50, b=40, l=50, r=10),
-            xaxis=dict(dtick=1),
+            xaxis=dict(dtick=phase_xaxis_dtick),
         )
         col.plotly_chart(fig, use_container_width=True)
 
@@ -436,12 +493,12 @@ if n_years == 1:
             ),
         ))
     fig_ps.update_layout(
-        xaxis_title="Match number at ground (within season)",
+        xaxis_title="Match number (within season)",
         yaxis_title="Economy (runs/over)",
         height=460,
         legend_title="Bowler type",
         hovermode="x unified",
-        xaxis=dict(dtick=1),
+        xaxis=dict(dtick=phase_xaxis_dtick),
     )
     st.plotly_chart(fig_ps, use_container_width=True)
 else:
@@ -468,7 +525,7 @@ else:
             yaxis_title="Economy (rpo)",
             height=420,
             legend_title="Season",
-            xaxis=dict(dtick=1),
+            xaxis=dict(dtick=phase_xaxis_dtick),
         )
         col.plotly_chart(fig, use_container_width=True)
 
@@ -490,13 +547,16 @@ st.divider()
 # Raw data
 # ---------------------------------------------------------------------------
 with st.expander("Show match-level raw data"):
-    show = match_econ_full[[
-        "year", "match_num", "date", "p_match", "matchup",
-        "total_runs", "overs", "economy",
-    ]].copy()
+    cols_to_show = ["year", "match_num", "date", "p_match", "matchup"]
+    if is_overall:
+        cols_to_show.append("ground")
+    cols_to_show += ["total_runs", "overs", "economy"]
+    show = match_econ_full[cols_to_show].copy()
     show["date"] = show["date"].dt.strftime("%d %b %Y")
     show["economy"] = show["economy"].round(2)
     show["overs"] = show["overs"].round(1)
+    if is_overall and "ground" in show.columns:
+        show["ground"] = show["ground"].apply(lambda g: g.split(",")[0])
     show = show.sort_values(["year", "match_num"])
     st.dataframe(show, use_container_width=True, hide_index=True)
 
