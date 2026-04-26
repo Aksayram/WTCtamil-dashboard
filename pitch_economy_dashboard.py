@@ -1,5 +1,5 @@
 """
-IPL Pitch Slowdown Analyzer (2023–2025)
+IPL Pitch Analyzer (2023–2025)
 ========================================
 Pick ONE ground and ONE or MORE years from the sidebar. The page shows
 economy game-by-game at that ground, with each year as its own line
@@ -22,11 +22,30 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
+# ---------------- PASSWORD ----------------
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == "wtc123":
+            st.session_state["password_correct"] = True
+        else:
+            st.session_state["password_correct"] = False
+    if "password_correct" not in st.session_state:
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        st.error("Wrong Password")
+        return False
+    return True
+
+if not check_password():
+    st.stop()
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="IPL Pitch Slowdown Analyzer",
+    page_title="IPL Pitch Analyzer",
     page_icon="🏏",
     layout="wide",
 )
