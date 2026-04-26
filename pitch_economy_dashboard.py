@@ -7,9 +7,9 @@ economy game-by-game at that ground, with each year as its own line
 
 Sections (top to bottom, single page, no tabs):
   1. KPI strip
-  2. Overall economy per match (line per year)
-  3. Phase split: Powerplay (1–6) / Middle (7–16) / Death (17–20)
-  4. Pace vs Spin economy per match
+  2. Overall economy per match (line per year) + auto verdict
+  3. Phase split: Powerplay (1–6) / Middle (7–16) / Death (17–20) + auto verdict
+  4. Pace vs Spin economy per match + auto verdict
 
 Run:
     pip install streamlit pandas numpy plotly openpyxl
@@ -153,6 +153,286 @@ def match_meta(df: pd.DataFrame) -> pd.DataFrame:
     runs = df.groupby("p_match")["total_runs"].sum().reset_index(name="match_runs")
     grounds = df[["p_match", "ground"]].drop_duplicates()
     return teams.merge(runs, on="p_match").merge(grounds, on="p_match")
+
+
+# ---------------------------------------------------------------------------
+# Verdict generators — rule-based plain English summaries of each chart.
+# Each one takes the same dataframe the chart uses and returns a markdown
+# string of 2–4 short lines.
+# ---------------------------------------------------------------------------
+def _trend_word(delta: float, threshold: float = 0.3) -> str:
+    """Map a numeric change to a direction word."""
+    if delta <= -threshold:
+        return "dropped"
+    if delta >= threshold:
+        return "rose"
+    return "held flat"
+
+
+def _trisect_means(series: pd.Series) -> tuple:
+    """Split a series into thirds and return (early, mid, late) means."""
+    n = len(series)
+    if n < 3:
+        return (series.mean(), series.mean(), series.mean())
+    third = n // 3
+    early = series.iloc[:third].mean()
+    mid = series.iloc[third:2 * third].mean()
+    late = series.iloc[2 * third:].mean()
+    return (early, mid, late)
+
+
+def verdict_overall(match_econ: pd.DataFrame) -> str:
+    """Verdict for the 'Economy per match' chart."""
+    lines = []
+    season_summaries = []
+    for yr, sub in match_econ.groupby("year"):
+        sub = sub.sort_values("match_num")
+        if len(sub) < 3:
+            continue
+        early, _, late = _trisect_means(sub["economy"])
+        delta = late - early
+        word = _trend_word(delta)
+        # Find biggest single-game outlier vs season median
+        median_econ = sub["economy"].median()
+        sub_dev = sub.assign(dev=sub["economy"] - median_econ)
+        big_dip = sub_dev.loc[sub_dev["dev"].idxmin()]
+        big_spike = sub_dev.loc[sub_dev["dev"].idxmax()]
+
+        season_summaries.append({
+            "year": yr,
+            "n": len(sub),
+            "early": early,
+            "late": late,
+            "delta": delta,
+            "word": word,
+            "avg": sub["economy"].mean(),
+            "dip_game": int(big_dip["match_num"]),
+            "dip_econ": big_dip["economy"],
+            "dip_match": big_dip.get("matchup", "—"),
+            "spike_game": int(big_spike["match_num"]),
+            "spike_econ": big_spike["economy"],
+        })
+
+    if not season_summaries:
+        return "_Not enough games to summarise._"
+
+    # Line 1: per-season trend
+    trend_bits = []
+    for s in season_summaries:
+        if s["word"] == "held flat":
+            trend_bits.append(
+                f"**{s['year']}** held flat at ~{s['avg']:.2f} rpo"
+            )
+        else:
+            trend_bits.append(
+                f"**{s['year']}** {s['word']} from {s['early']:.2f} → "
+                f"{s['late']:.2f} rpo ({s['delta']:+.2f})"
+            )
+    lines.append(" · ".join(trend_bits))
+
+    # Line 2: cross-season comparison if more than one
+    if len(season_summaries) > 1:
+        hottest = max(season_summaries, key=lambda s: s["avg"])
+        coldest = min(season_summaries, key=lambda s: s["avg"])
+        if hottest["year"] != coldest["year"]:
+            lines.append(
+                f"Highest scoring season overall: **{hottest['year']}** "
+                f"({hottest['avg']:.2f} rpo). Lowest: **{coldest['year']}** "
+                f"({coldest['avg']:.2f} rpo)."
+            )
+
+    # Line 3: notable single game (biggest dip across all seasons shown)
+    biggest_dip = min(season_summaries, key=lambda s: s["dip_econ"])
+    lines.append(
+        f"Slowest game in scope: {biggest_dip['year']} game "
+        f"#{biggest_dip['dip_game']} ({biggest_dip['dip_econ']:.2f} rpo, "
+        f"{biggest_dip['dip_match']})."
+    )
+
+    # Line 4: verdict on the slowdown hypothesis
+    declining = [s for s in season_summaries if s["word"] == "dropped"]
+    rising = [s for s in season_summaries if s["word"] == "rose"]
+    if len(declining) == len(season_summaries) and len(declining) > 1:
+        lines.append(
+            "🔻 **Slowdown signal: consistent.** Every season in scope shows "
+            "economy declining as games progress."
+        )
+    elif len(rising) == len(season_summaries) and len(rising) > 1:
+        lines.append(
+            "🔺 **No slowdown.** Every season shows economy rising as games "
+            "progress — surfaces flattening, not slowing."
+        )
+    elif declining and rising:
+        d_yrs = ", ".join(str(s["year"]) for s in declining)
+        r_yrs = ", ".join(str(s["year"]) for s in rising)
+        lines.append(
+            f"⚖️ **Mixed signal.** Slowdown in {d_yrs}; surfaces sped up in "
+            f"{r_yrs}. Not a consistent year-over-year pattern."
+        )
+
+    return "\n\n".join(lines)
+
+
+def verdict_phase(phase_econ: pd.DataFrame) -> str:
+    """Verdict for the 'Phase split' chart."""
+    if phase_econ.empty:
+        return "_No phase data in scope._"
+
+    lines = []
+    # Per phase: trend across the season (averaged across years if multiple)
+    phase_trends = {}
+    for phase_name, sub in phase_econ.groupby("phase"):
+        sub = sub.sort_values("match_num")
+        if len(sub) < 3:
+            continue
+        early, _, late = _trisect_means(sub["economy"])
+        phase_trends[phase_name] = {
+            "early": early,
+            "late": late,
+            "delta": late - early,
+            "avg": sub["economy"].mean(),
+            "word": _trend_word(late - early),
+        }
+
+    if not phase_trends:
+        return "_Not enough games for phase analysis._"
+
+    # Line 1: each phase's trend
+    bits = []
+    for phase_name, t in phase_trends.items():
+        short = phase_name.split(" ")[0]  # "Powerplay" / "Middle" / "Death"
+        if t["word"] == "held flat":
+            bits.append(f"**{short}** flat (~{t['avg']:.2f})")
+        else:
+            bits.append(f"**{short}** {t['word']} {t['delta']:+.2f}")
+    lines.append(" · ".join(bits))
+
+    # Line 2: overall scoring level by phase
+    avgs = [(name, t["avg"]) for name, t in phase_trends.items()]
+    avgs.sort(key=lambda x: x[1], reverse=True)
+    if len(avgs) >= 2:
+        lines.append(
+            f"Most expensive phase: **{avgs[0][0].split(' ')[0]}** "
+            f"({avgs[0][1]:.2f} rpo). Cheapest: **{avgs[-1][0].split(' ')[0]}** "
+            f"({avgs[-1][1]:.2f} rpo)."
+        )
+
+    # Line 3: interpretive verdict
+    pp = phase_trends.get("Powerplay (1–6)")
+    mid = phase_trends.get("Middle (7–16)")
+    death = phase_trends.get("Death (17–20)")
+
+    if pp and mid and death:
+        if mid["word"] == "dropped" and pp["word"] != "dropped":
+            lines.append(
+                "🎯 **Spinner-grip signal:** middle overs got cheaper while "
+                "powerplay held — pitches gripping more for spin as the season wore on."
+            )
+        elif death["word"] == "dropped" and mid["word"] != "dropped":
+            lines.append(
+                "🎯 **Death-overs slowdown:** late-innings economy dropped while "
+                "middle held — slower surfaces taking pace off finishing shots."
+            )
+        elif all(t["word"] == "dropped" for t in (pp, mid, death)):
+            lines.append(
+                "🎯 **Across-the-board slowdown:** every phase got cheaper as "
+                "games went on. Surfaces deteriorating uniformly."
+            )
+        elif all(t["word"] == "rose" for t in (pp, mid, death)):
+            lines.append(
+                "🎯 **No slowdown signal.** All three phases got more expensive "
+                "as the season progressed — surfaces flattening, batters adapting."
+            )
+        else:
+            lines.append(
+                "🎯 **Mixed phase behaviour** — no single phase is driving the "
+                "trend; the slowdown isn't concentrated."
+            )
+
+    return "\n\n".join(lines)
+
+
+def verdict_pace_spin(ps_econ: pd.DataFrame) -> str:
+    """Verdict for the 'Pace vs Spin' chart."""
+    if ps_econ.empty:
+        return "_No pace/spin data in scope._"
+
+    pace = ps_econ[ps_econ["bowler_type"] == "Pace"].sort_values("match_num")
+    spin = ps_econ[ps_econ["bowler_type"] == "Spin"].sort_values("match_num")
+
+    if len(pace) < 3 or len(spin) < 3:
+        return "_Not enough games for pace/spin analysis._"
+
+    pace_early, _, pace_late = _trisect_means(pace["economy"])
+    spin_early, _, spin_late = _trisect_means(spin["economy"])
+    pace_delta = pace_late - pace_early
+    spin_delta = spin_late - spin_early
+    pace_avg = pace["economy"].mean()
+    spin_avg = spin["economy"].mean()
+
+    lines = []
+
+    # Line 1: trends for each
+    pace_phrase = (
+        f"**Pace** held flat ({pace_early:.2f} → {pace_late:.2f})"
+        if _trend_word(pace_delta) == "held flat"
+        else f"**Pace** {_trend_word(pace_delta)} {pace_delta:+.2f} rpo "
+             f"({pace_early:.2f} → {pace_late:.2f})"
+    )
+    spin_phrase = (
+        f"**Spin** held flat ({spin_early:.2f} → {spin_late:.2f})"
+        if _trend_word(spin_delta) == "held flat"
+        else f"**Spin** {_trend_word(spin_delta)} {spin_delta:+.2f} rpo "
+             f"({spin_early:.2f} → {spin_late:.2f})"
+    )
+    lines.append(f"{pace_phrase} · {spin_phrase}")
+
+    # Line 2: who's cheaper overall
+    if abs(pace_avg - spin_avg) < 0.2:
+        lines.append(
+            f"Pace and spin are pricing roughly the same overall "
+            f"(~{pace_avg:.2f} vs ~{spin_avg:.2f} rpo)."
+        )
+    else:
+        cheaper = "Spin" if spin_avg < pace_avg else "Pace"
+        c_avg = min(pace_avg, spin_avg)
+        e_avg = max(pace_avg, spin_avg)
+        lines.append(
+            f"**{cheaper}** is the more economical option overall "
+            f"({c_avg:.2f} vs {e_avg:.2f} rpo)."
+        )
+
+    # Line 3: interpretive verdict
+    pace_word = _trend_word(pace_delta)
+    spin_word = _trend_word(spin_delta)
+
+    if pace_word == "dropped" and spin_word != "dropped":
+        lines.append(
+            "⚡ **Pace-friendly drift:** pacers tightening up while spinners "
+            "held steady — likely pitches firming up / new ball doing more."
+        )
+    elif spin_word == "dropped" and pace_word != "dropped":
+        lines.append(
+            "🌀 **Spin-friendly drift:** spinners getting cheaper while pace "
+            "held steady — pitches gripping more / surfaces slowing for spin."
+        )
+    elif pace_word == "dropped" and spin_word == "dropped":
+        lines.append(
+            "🔻 **Bowlers gaining the upper hand on both fronts** — pace and "
+            "spin both got cheaper. Surfaces favouring bowlers as games progressed."
+        )
+    elif pace_word == "rose" and spin_word == "rose":
+        lines.append(
+            "🔺 **Batter-friendly drift:** pace and spin both leaked more runs "
+            "as games went on — surfaces flattening for both bowler types."
+        )
+    else:
+        lines.append(
+            "⚖️ **No clear shift** — pace and spin economies stayed within normal "
+            "noise. Pitch behaviour roughly stable across the period."
+        )
+
+    return "\n\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +628,10 @@ fig_overall.update_layout(
 )
 st.plotly_chart(fig_overall, use_container_width=True)
 
+with st.container(border=True):
+    st.markdown("**📋 Verdict**")
+    st.markdown(verdict_overall(match_econ_full))
+
 st.divider()
 
 # ---------------------------------------------------------------------------
@@ -437,6 +721,10 @@ else:
         )
         col.plotly_chart(fig, use_container_width=True)
 
+with st.container(border=True):
+    st.markdown("**📋 Verdict**")
+    st.markdown(verdict_phase(phase_econ))
+
 st.divider()
 
 # ---------------------------------------------------------------------------
@@ -525,6 +813,10 @@ ps_summary = (
 )
 ps_summary.columns.name = None
 st.dataframe(ps_summary, use_container_width=True)
+
+with st.container(border=True):
+    st.markdown("**📋 Verdict**")
+    st.markdown(verdict_pace_spin(ps_econ))
 
 st.divider()
 
