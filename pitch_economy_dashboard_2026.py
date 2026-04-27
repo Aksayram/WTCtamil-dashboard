@@ -27,11 +27,31 @@ import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
 
+# ---------------- PASSWORD ----------------
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == "wtc123":
+            st.session_state["password_correct"] = True
+        else:
+            st.session_state["password_correct"] = False
+    if "password_correct" not in st.session_state:
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        st.error("Wrong Password")
+        return False
+    return True
+
+if not check_password():
+    st.stop()
+
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="IPL 2026 Live Analyzer",
+    page_title="IPL 2026 Live Pitch Analyzer",
     page_icon="🏏",
     layout="wide",
 )
@@ -496,14 +516,14 @@ work = filter_innings(work, innings_filter)
 work = filter_session(work, session_filter)
 
 if work.empty:
-    st.title("🏏 IPL 2026 Live Analyzer")
+    st.title("🏏 IPL 2026 Live Pitch Analyzer")
     st.warning("No data for this combination. Try widening the filters.")
     st.stop()
 
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
-st.title("🏏 IPL 2026 Live Analyzer")
+st.title("🏏 IPL 2026 Live Pitch Analyzer")
 ground_label = "All grounds" if is_overall else ground.split(",")[0]
 st.caption(
     f"**{ground_label}** · Metric: **{METRIC_LABEL}** · "
