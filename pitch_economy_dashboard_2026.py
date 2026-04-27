@@ -102,9 +102,15 @@ def load_data(path_or_buffer):
         df["out"].fillna(False).astype(bool)
         & ~df["dismissal"].fillna("").isin(NON_BOWLER_DISMISSALS)
     ).astype(int)
-    # Normalise daynight values
-    df["session"] = df["daynight"].astype(str).str.strip().str.title()
-    df.loc[~df["session"].isin(["Day", "Night"]), "session"] = "Night"
+    # Normalise daynight values.
+    # The source uses values like "night match" (pure evening game under lights)
+    # and "day/night match" (afternoon game that starts in daylight, finishes
+    # under lights). For the filter, "day/night match" -> Day, "night match" -> Night.
+    raw = df["daynight"].astype(str).str.strip().str.lower()
+    df["session"] = np.where(
+        raw.str.startswith("day"), "Day",
+        np.where(raw.str.startswith("night"), "Night", "Night"),
+    )
     return df
 
 
@@ -505,7 +511,10 @@ session_filter = st.sidebar.radio(
     "Session",
     ["Both", "Day only", "Night only"],
     index=0,
-    help="Uses the official `daynight` column from the source data.",
+    help=("Uses the official `daynight` column. "
+          "**Day** = afternoon games that start in daylight (`day/night match` "
+          "in source data, ~3:30 PM start). **Night** = pure evening games "
+          "under lights (~7:30 PM start)."),
 )
 
 # ---------------------------------------------------------------------------
